@@ -110,6 +110,8 @@ const Dashboard = () => {
     return enrollments.some((e) => e.course_id === courseId);
   };
 
+  const hasAnyAccess = enrollments.length > 0;
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -229,24 +231,24 @@ const Dashboard = () => {
                     <CardDescription>{course.description}</CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-2">
-                    {course.price_nok > 0 && !isEnrolled(course.id) && (
+                    {!hasAnyAccess && course.price_nok > 0 && (
                       <p className="text-sm font-semibold">{course.price_nok} NOK</p>
                     )}
                     <Button
                       className="w-full"
-                      variant={isEnrolled(course.id) ? "secondary" : "default"}
+                      variant={hasAnyAccess ? "secondary" : "default"}
                       onClick={() => {
-                        if (isEnrolled(course.id) || course.price_nok === 0) {
+                        if (hasAnyAccess) {
                           navigate(`/course/${course.id}`);
                         } else {
                           navigate(`/checkout?courseId=${course.id}`);
                         }
                       }}
                     >
-                      {!isEnrolled(course.id) && course.price_nok > 0 && (
+                      {!hasAnyAccess && (
                         <Lock className="h-4 w-4 mr-2" />
                       )}
-                      {isEnrolled(course.id) ? "Fortsett kurs" : "Se kurs"}
+                      {hasAnyAccess ? "Se kurs" : "Se kurs"}
                     </Button>
                   </CardContent>
                 </Card>
