@@ -8,6 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Anchor, BookOpen, LogOut, Award, Menu, Settings } from "lucide-react";
 import type { User } from "@supabase/supabase-js";
+import { BoatInstructorChat } from "@/components/BoatInstructorChat";
 
 interface Course {
   id: string;
@@ -239,6 +240,10 @@ const Dashboard = () => {
               ))}
             </div>
           )}
+        </section>
+
+        <section className="fade-in mt-8" style={{ animationDelay: "0.3s" }}>
+          <BoatInstructorChat />
         </section>
       </main>
     </div>
