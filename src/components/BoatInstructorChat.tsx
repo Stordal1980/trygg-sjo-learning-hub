@@ -143,8 +143,15 @@ export const BoatInstructorChat = () => {
             <ScrollArea className="h-[400px] pr-4" ref={scrollRef}>
               <div className="space-y-4">
                 {messages.length === 0 && (
-                  <div className="text-center text-muted-foreground py-8">
-                    Start en samtale med instruktøren din!
+                  <div className="flex justify-start">
+                    <div className="max-w-[80%] rounded-lg px-4 py-3 bg-muted text-muted-foreground">
+                      <p className="text-sm font-medium mb-1">👋 Velkommen!</p>
+                      <p className="text-sm">
+                        Jeg er din båtførerinstruktør. Still meg spørsmål om sjømannskap, 
+                        navigasjon, lover og regler for fritidsbåt. Jeg er her for å hjelpe 
+                        deg å bestå båtførerprøven!
+                      </p>
+                    </div>
                   </div>
                 )}
                 {messages.map((msg, idx) => (
