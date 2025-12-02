@@ -123,8 +123,6 @@ const Index = () => {
                 "Grunnleggende båtsikkerhet og sjøregler",
                 "Redningsutstyr og nødprosedyrer",
                 "Navigasjon og værforhold",
-                "Førstehjelp på sjøen",
-                "Miljøvennlig båtkjøring",
               ].map((item, index) => (
                 <Card
                   key={index}
