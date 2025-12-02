@@ -362,6 +362,18 @@ export type Database = {
         }
         Returns: boolean
       }
+      validate_discount_code: {
+        Args: { code_to_check: string }
+        Returns: {
+          code: string
+          current_uses: number
+          discount_percent: number
+          expires_at: string
+          id: string
+          is_active: boolean
+          max_uses: number
+        }[]
+      }
     }
     Enums: {
       app_role: "admin" | "user"
