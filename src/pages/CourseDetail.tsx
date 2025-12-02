@@ -61,6 +61,19 @@ const CourseDetail = () => {
     const fetchCourseData = async () => {
       if (!courseId || !user) return;
 
+      // Validate that courseId is a valid UUID format
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (!uuidRegex.test(courseId)) {
+        console.error("Invalid course ID format:", courseId);
+        toast({
+          title: "Ugyldig kurs-ID",
+          description: "Kurset kunne ikke lastes",
+          variant: "destructive",
+        });
+        navigate("/dashboard");
+        return;
+      }
+
       try {
         // Fetch course details
         const { data: courseData, error: courseError } = await supabase
@@ -68,9 +81,20 @@ const CourseDetail = () => {
           .select("*")
           .eq("id", courseId)
           .eq("is_published", true)
-          .single();
+          .maybeSingle();
 
         if (courseError) throw courseError;
+        
+        if (!courseData) {
+          toast({
+            title: "Kurs ikke funnet",
+            description: "Kurset eksisterer ikke eller er ikke publisert",
+            variant: "destructive",
+          });
+          navigate("/dashboard");
+          return;
+        }
+        
         setCourse(courseData);
 
         // Fetch modules
@@ -83,9 +107,10 @@ const CourseDetail = () => {
         if (modulesError) throw modulesError;
         setModules(modulesData || []);
       } catch (error: any) {
+        console.error("Error loading course:", error);
         toast({
           title: "Feil ved lasting av kurs",
-          description: error.message,
+          description: "Kunne ikke laste kursinformasjon",
           variant: "destructive",
         });
         navigate("/dashboard");
