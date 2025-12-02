@@ -5,7 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
-import { Anchor, BookOpen, LogOut, Award } from "lucide-react";
+import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { Anchor, BookOpen, LogOut, Award, Menu, Settings } from "lucide-react";
 import type { User } from "@supabase/supabase-js";
 
 interface Course {
@@ -25,6 +26,7 @@ const Dashboard = () => {
   const [courses, setCourses] = useState<Course[]>([]);
   const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -73,6 +75,16 @@ const Dashboard = () => {
 
         if (enrollmentsError) throw enrollmentsError;
         setEnrollments(enrollmentsData || []);
+
+        // Check if user is admin
+        const { data: rolesData } = await supabase
+          .from("user_roles")
+          .select("role")
+          .eq("user_id", user.id)
+          .eq("role", "admin")
+          .maybeSingle();
+
+        setIsAdmin(!!rolesData);
       } catch (error: any) {
         toast({
           title: "Feil ved lasting av data",
@@ -115,10 +127,34 @@ const Dashboard = () => {
             <Anchor className="h-6 w-6 text-primary" aria-hidden="true" />
             <h1 className="text-xl font-bold">Trygg Sjø</h1>
           </div>
-          <Button variant="ghost" size="sm" onClick={handleLogout}>
-            <LogOut className="h-4 w-4 mr-2" aria-hidden="true" />
-            Logg ut
-          </Button>
+          <div className="flex items-center gap-2">
+            {isAdmin && (
+              <Sheet>
+                <SheetTrigger asChild>
+                  <Button variant="ghost" size="sm">
+                    <Menu className="h-5 w-5" aria-hidden="true" />
+                  </Button>
+                </SheetTrigger>
+                <SheetContent className="bg-card z-50">
+                  <div className="flex flex-col gap-4 mt-8">
+                    <h2 className="text-lg font-bold mb-4">Administrator</h2>
+                    <Button
+                      variant="outline"
+                      className="w-full justify-start"
+                      onClick={() => navigate("/admin")}
+                    >
+                      <Settings className="h-4 w-4 mr-2" aria-hidden="true" />
+                      Admin-panel
+                    </Button>
+                  </div>
+                </SheetContent>
+              </Sheet>
+            )}
+            <Button variant="ghost" size="sm" onClick={handleLogout}>
+              <LogOut className="h-4 w-4 mr-2" aria-hidden="true" />
+              Logg ut
+            </Button>
+          </div>
         </div>
       </nav>
 
