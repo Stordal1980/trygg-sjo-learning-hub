@@ -120,9 +120,11 @@ const Index = () => {
             
             <div className="space-y-6">
               {[
-                "Grunnleggende båtsikkerhet og sjøregler",
-                "Redningsutstyr og nødprosedyrer",
-                "Navigasjon og værforhold",
+                "Sjøveisregler og vikeplikt",
+                "Sjømerker og navigasjon",
+                "Sikkerhet og beredskap om bord",
+                "Lover, promille og ansvar",
+                "Grunnleggende sjømannskap",
               ].map((item, index) => (
                 <Card
                   key={index}
@@ -167,7 +169,7 @@ const Index = () => {
             <span className="font-bold">Trygg Sjø</span>
           </div>
           <p className="text-sm">
-            © 2024 Trygg Sjø. Alle rettigheter reservert.
+            © 2026 Trygg Sjø. Alle rettigheter reservert.
           </p>
         </div>
       </footer>
