@@ -71,44 +71,36 @@ export default function Checkout() {
     if (!discountCode.trim()) return;
 
     try {
+      // Use secure RPC function to validate code without exposing all codes
       const { data, error } = await supabase
-        .from("discount_codes")
-        .select("*")
-        .eq("code", discountCode.trim().toUpperCase())
-        .eq("is_active", true)
-        .single();
+        .rpc('validate_discount_code', { 
+          code_to_check: discountCode.trim().toUpperCase() 
+        });
 
-      if (error || !data) {
+      if (error) {
+        console.error("Error validating discount code:", error);
+        toast({
+          title: "Feil",
+          description: "Kunne ikke validere rabattkode",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      if (!data || data.length === 0) {
         toast({
           title: "Ugyldig rabattkode",
-          description: "Rabattkoden finnes ikke eller er utløpt",
+          description: "Rabattkoden finnes ikke, er utløpt eller er brukt opp",
           variant: "destructive",
         });
         return;
       }
 
-      if (data.expires_at && new Date(data.expires_at) < new Date()) {
-        toast({
-          title: "Utløpt rabattkode",
-          description: "Denne rabattkoden har utløpt",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      if (data.max_uses && data.current_uses >= data.max_uses) {
-        toast({
-          title: "Rabattkode brukt opp",
-          description: "Denne rabattkoden har nådd maksimalt antall bruk",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      setDiscount(data.discount_percent);
+      const validCode = data[0];
+      setDiscount(validCode.discount_percent);
       toast({
         title: "Rabattkode aktivert!",
-        description: `${data.discount_percent}% rabatt`,
+        description: `${validCode.discount_percent}% rabatt`,
       });
     } catch (error) {
       console.error("Error applying discount:", error);
