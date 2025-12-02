@@ -20,15 +20,15 @@ export const useEnrollmentCheck = (courseId?: string) => {
           return;
         }
 
+        // Sjekk om brukeren har noen enrollments i det hele tatt
         const { data, error } = await supabase
           .from("user_enrollments")
           .select("id")
           .eq("user_id", user.id)
-          .eq("course_id", courseId)
-          .maybeSingle();
+          .limit(1);
 
         if (error) throw error;
-        setHasAccess(!!data);
+        setHasAccess((data?.length || 0) > 0);
       } catch (error) {
         console.error("Error checking enrollment:", error);
         setHasAccess(false);

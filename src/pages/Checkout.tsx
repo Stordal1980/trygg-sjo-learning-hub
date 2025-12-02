@@ -156,10 +156,20 @@ export default function Checkout() {
           await supabase.from("user_enrollments").insert(enrollments);
         }
       } else if (courseId) {
-        await supabase.from("user_enrollments").insert({
-          user_id: user.id,
-          course_id: courseId,
-        });
+        // Gi tilgang til alle publiserte kurs (også ved enkelt-kurskjøp)
+        const { data: courses } = await supabase
+          .from("courses")
+          .select("id")
+          .eq("is_published", true);
+
+        if (courses) {
+          const enrollments = courses.map(course => ({
+            user_id: user.id,
+            course_id: course.id,
+          }));
+          
+          await supabase.from("user_enrollments").insert(enrollments);
+        }
       }
 
       toast({

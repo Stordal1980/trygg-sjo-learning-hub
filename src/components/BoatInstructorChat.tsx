@@ -32,6 +32,7 @@ export const BoatInstructorChat = () => {
           return;
         }
 
+        // Sjekk om brukeren har noen enrollments i det hele tatt
         const { data, error } = await supabase
           .from("user_enrollments")
           .select("id")
