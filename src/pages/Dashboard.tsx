@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import { Anchor, BookOpen, LogOut, Award, Menu, Settings } from "lucide-react";
+import { Anchor, BookOpen, LogOut, Award, Menu, Settings, Lock } from "lucide-react";
 import type { User } from "@supabase/supabase-js";
 import { BoatInstructorChat } from "@/components/BoatInstructorChat";
 
@@ -230,15 +230,11 @@ const Dashboard = () => {
                   </CardHeader>
                   <CardContent className="space-y-2">
                     {course.price_nok > 0 && !isEnrolled(course.id) && (
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="text-muted-foreground">Pris:</span>
-                        <span className="font-semibold">{course.price_nok} NOK</span>
-                      </div>
+                      <p className="text-sm font-semibold">{course.price_nok} NOK</p>
                     )}
                     <Button
                       className="w-full"
-                      variant={isEnrolled(course.id) ? "secondary" : "outline"}
-                      disabled={!isEnrolled(course.id) && course.price_nok > 0}
+                      variant={isEnrolled(course.id) ? "secondary" : "default"}
                       onClick={() => {
                         if (isEnrolled(course.id) || course.price_nok === 0) {
                           navigate(`/course/${course.id}`);
@@ -247,18 +243,11 @@ const Dashboard = () => {
                         }
                       }}
                     >
+                      {!isEnrolled(course.id) && course.price_nok > 0 && (
+                        <Lock className="h-4 w-4 mr-2" />
+                      )}
                       {isEnrolled(course.id) ? "Fortsett kurs" : "Se kurs"}
                     </Button>
-                    {!isEnrolled(course.id) && course.price_nok > 0 && (
-                      <Button
-                        variant="default"
-                        size="sm"
-                        className="w-full"
-                        onClick={() => navigate(`/checkout?courseId=${course.id}`)}
-                      >
-                        Kjøp tilgang
-                      </Button>
-                    )}
                   </CardContent>
                 </Card>
               ))}
