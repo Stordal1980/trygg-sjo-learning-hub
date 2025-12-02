@@ -1,1 +1,4 @@
 project_id = "tddmaaysomoedmjlufww"
+
+[functions.boat-instructor-chat]
+verify_jwt = false
