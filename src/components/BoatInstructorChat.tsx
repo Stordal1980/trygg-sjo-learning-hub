@@ -3,9 +3,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { MessageCircle, Send, ChevronDown, ChevronUp } from "lucide-react";
+import { MessageCircle, Send, ChevronDown, ChevronUp, Lock } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { supabase } from "@/integrations/supabase/client";
+import { useNavigate } from "react-router-dom";
 
 type Message = { role: "user" | "assistant"; content: string };
 
@@ -14,8 +16,40 @@ export const BoatInstructorChat = () => {
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
+  const [hasAccess, setHasAccess] = useState(false);
+  const [checkingAccess, setCheckingAccess] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    const checkAccess = async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+          setHasAccess(false);
+          setCheckingAccess(false);
+          return;
+        }
+
+        const { data, error } = await supabase
+          .from("user_enrollments")
+          .select("id")
+          .eq("user_id", user.id)
+          .limit(1);
+
+        if (error) throw error;
+        setHasAccess((data?.length || 0) > 0);
+      } catch (error) {
+        console.error("Error checking access:", error);
+        setHasAccess(false);
+      } finally {
+        setCheckingAccess(false);
+      }
+    };
+
+    checkAccess();
+  }, []);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -99,7 +133,7 @@ export const BoatInstructorChat = () => {
   };
 
   const handleSend = async () => {
-    if (!input.trim() || isLoading) return;
+    if (!input.trim() || isLoading || !hasAccess) return;
 
     const userMessage = input.trim();
     setInput("");
@@ -140,7 +174,28 @@ export const BoatInstructorChat = () => {
         </CardHeader>
         <CollapsibleContent>
           <CardContent className="space-y-4">
-            <ScrollArea className="h-[400px] pr-4" ref={scrollRef}>
+            {!hasAccess && !checkingAccess && (
+              <div className="bg-muted p-4 rounded-lg text-center space-y-2">
+                <Lock className="h-8 w-8 mx-auto text-muted-foreground" />
+                <p className="text-sm text-muted-foreground">
+                  Du må kjøpe tilgang til minst ett kurs for å bruke chatboten
+                </p>
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    const firstCourse = document.querySelector('[data-course-id]');
+                    if (firstCourse) {
+                      const courseId = firstCourse.getAttribute('data-course-id');
+                      navigate(`/checkout?courseId=${courseId}`);
+                    }
+                  }}
+                >
+                  Se tilgjengelige kurs
+                </Button>
+              </div>
+            )}
+            {hasAccess && (
+              <ScrollArea className="h-[400px] pr-4" ref={scrollRef}>
               <div className="space-y-4">
                 {messages.length === 0 && (
                   <div className="flex justify-start">
@@ -179,6 +234,8 @@ export const BoatInstructorChat = () => {
                 )}
               </div>
             </ScrollArea>
+            )}
+            {hasAccess && (
             <div className="flex gap-2">
               <Input
                 placeholder="Skriv ditt spørsmål..."
@@ -197,6 +254,7 @@ export const BoatInstructorChat = () => {
                 <Send className="h-4 w-4" />
               </Button>
             </div>
+            )}
           </CardContent>
         </CollapsibleContent>
       </Collapsible>

@@ -15,6 +15,7 @@ interface Course {
   title: string;
   description: string | null;
   thumbnail_url: string | null;
+  price_nok: number;
 }
 
 interface Enrollment {
@@ -222,18 +223,30 @@ const Dashboard = () => {
           ) : (
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
               {courses.map((course) => (
-                <Card key={course.id} className="hover:shadow-lg transition-shadow">
+                <Card key={course.id} className="hover:shadow-lg transition-shadow" data-course-id={course.id}>
                   <CardHeader>
                     <CardTitle className="text-lg">{course.title}</CardTitle>
                     <CardDescription>{course.description}</CardDescription>
                   </CardHeader>
-                  <CardContent>
+                  <CardContent className="space-y-2">
+                    {course.price_nok > 0 && (
+                      <p className="text-sm font-semibold">{course.price_nok} NOK</p>
+                    )}
                     <Button
                       className="w-full"
                       variant={isEnrolled(course.id) ? "secondary" : "default"}
-                      onClick={() => navigate(`/course/${course.id}`)}
+                      disabled={!isEnrolled(course.id) && course.price_nok > 0}
+                      onClick={() => {
+                        if (isEnrolled(course.id)) {
+                          navigate(`/course/${course.id}`);
+                        } else if (course.price_nok > 0) {
+                          navigate(`/checkout?courseId=${course.id}`);
+                        } else {
+                          navigate(`/course/${course.id}`);
+                        }
+                      }}
                     >
-                      {isEnrolled(course.id) ? "Fortsett kurs" : "Se kurs"}
+                      {isEnrolled(course.id) ? "Fortsett kurs" : course.price_nok > 0 ? "Kjøp tilgang" : "Se kurs"}
                     </Button>
                   </CardContent>
                 </Card>

@@ -14,6 +14,36 @@ export type Database = {
   }
   public: {
     Tables: {
+      bundle_pricing: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          is_active: boolean
+          name: string
+          price_nok: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          name: string
+          price_nok: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          name?: string
+          price_nok?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       course_modules: {
         Row: {
           content: string | null
@@ -91,6 +121,42 @@ export type Database = {
         }
         Relationships: []
       }
+      discount_codes: {
+        Row: {
+          code: string
+          created_at: string
+          current_uses: number
+          discount_percent: number
+          expires_at: string | null
+          id: string
+          is_active: boolean
+          max_uses: number | null
+          updated_at: string
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          current_uses?: number
+          discount_percent: number
+          expires_at?: string | null
+          id?: string
+          is_active?: boolean
+          max_uses?: number | null
+          updated_at?: string
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          current_uses?: number
+          discount_percent?: number
+          expires_at?: string | null
+          id?: string
+          is_active?: boolean
+          max_uses?: number | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       module_progress: {
         Row: {
           completed: boolean
@@ -126,6 +192,76 @@ export type Database = {
           },
           {
             foreignKeyName: "module_progress_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      payments: {
+        Row: {
+          amount_nok: number
+          course_id: string | null
+          created_at: string
+          discount_amount_nok: number | null
+          discount_code_id: string | null
+          final_amount_nok: number
+          id: string
+          is_bundle: boolean
+          payment_method: string
+          status: string
+          stripe_payment_id: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          amount_nok: number
+          course_id?: string | null
+          created_at?: string
+          discount_amount_nok?: number | null
+          discount_code_id?: string | null
+          final_amount_nok: number
+          id?: string
+          is_bundle?: boolean
+          payment_method?: string
+          status?: string
+          stripe_payment_id?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          amount_nok?: number
+          course_id?: string | null
+          created_at?: string
+          discount_amount_nok?: number | null
+          discount_code_id?: string | null
+          final_amount_nok?: number
+          id?: string
+          is_bundle?: boolean
+          payment_method?: string
+          status?: string
+          stripe_payment_id?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payments_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "courses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payments_discount_code_id_fkey"
+            columns: ["discount_code_id"]
+            isOneToOne: false
+            referencedRelation: "discount_codes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payments_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "profiles"

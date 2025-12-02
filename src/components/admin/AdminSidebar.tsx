@@ -1,4 +1,4 @@
-import { LayoutDashboard, BookOpen, Settings } from "lucide-react";
+import { LayoutDashboard, BookOpen, Settings, DollarSign, Ticket } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import {
   Sidebar,
@@ -15,6 +15,8 @@ import {
 const menuItems = [
   { title: "Oversikt", url: "/admin", icon: LayoutDashboard },
   { title: "Kurs", url: "/admin/courses", icon: BookOpen },
+  { title: "Priser", url: "/admin/pricing", icon: DollarSign },
+  { title: "Rabattkoder", url: "/admin/discounts", icon: Ticket },
   { title: "Innstillinger", url: "/admin/settings", icon: Settings },
 ];
 
