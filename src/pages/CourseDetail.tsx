@@ -4,14 +4,16 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { Anchor, ArrowLeft, Play, CheckCircle2 } from "lucide-react";
+import { Anchor, ArrowLeft, Play, CheckCircle2, Lock } from "lucide-react";
 import type { User } from "@supabase/supabase-js";
 import { Video360Player } from "@/components/Video360Player";
+import { useEnrollmentCheck } from "@/hooks/useEnrollmentCheck";
 
 interface Course {
   id: string;
   title: string;
   description: string | null;
+  price_nok: number;
 }
 
 interface Module {
@@ -29,6 +31,7 @@ const CourseDetail = () => {
   const [course, setCourse] = useState<Course | null>(null);
   const [modules, setModules] = useState<Module[]>([]);
   const [loading, setLoading] = useState(true);
+  const { hasAccess, loading: accessLoading } = useEnrollmentCheck(courseId);
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -94,7 +97,7 @@ const CourseDetail = () => {
     fetchCourseData();
   }, [courseId, user, navigate, toast]);
 
-  if (loading) {
+  if (loading || accessLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
@@ -107,6 +110,49 @@ const CourseDetail = () => {
 
   if (!course) {
     return null;
+  }
+
+  // If user doesn't have access, show locked content
+  if (!hasAccess && course.price_nok > 0) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-background via-secondary/10 to-background">
+        <nav className="border-b bg-card/50 backdrop-blur-sm sticky top-0 z-10">
+          <div className="container mx-auto px-4 py-4 flex items-center gap-4">
+            <Button variant="ghost" size="sm" onClick={() => navigate("/dashboard")}>
+              <ArrowLeft className="h-4 w-4 mr-2" aria-hidden="true" />
+              Tilbake
+            </Button>
+            <div className="flex items-center gap-2">
+              <Anchor className="h-6 w-6 text-primary" aria-hidden="true" />
+              <h1 className="text-xl font-bold">Trygg Sjø</h1>
+            </div>
+          </div>
+        </nav>
+
+        <main className="container mx-auto px-4 py-8">
+          <Card className="max-w-2xl mx-auto">
+            <CardHeader className="text-center">
+              <Lock className="h-16 w-16 mx-auto mb-4 text-muted-foreground" />
+              <CardTitle className="text-2xl">{course.title}</CardTitle>
+              <CardDescription>{course.description}</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4 text-center">
+              <p className="text-3xl font-bold">{course.price_nok} NOK</p>
+              <p className="text-muted-foreground">
+                Kjøp tilgang til dette kurset for å se innholdet
+              </p>
+              <Button
+                size="lg"
+                onClick={() => navigate(`/checkout?courseId=${courseId}`)}
+                className="w-full"
+              >
+                Kjøp tilgang
+              </Button>
+            </CardContent>
+          </Card>
+        </main>
+      </div>
+    );
   }
 
   return (
