@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { useToast } from "@/hooks/use-toast";
 import { Anchor, ArrowLeft, Play, CheckCircle2 } from "lucide-react";
 import type { User } from "@supabase/supabase-js";
+import { Video360Player } from "@/components/Video360Player";
 
 interface Course {
   id: string;
@@ -165,21 +166,21 @@ const CourseDetail = () => {
                       <CheckCircle2 className="h-6 w-6 text-muted-foreground" aria-hidden="true" />
                     </div>
                   </CardHeader>
-                  <CardContent>
-                    {module.content && (
-                      <p className="text-sm text-muted-foreground mb-4">
-                        {module.content}
-                      </p>
-                    )}
+                  <CardContent className="space-y-4">
                     {module.video_url ? (
-                      <Button className="w-full sm:w-auto">
-                        <Play className="h-4 w-4 mr-2" aria-hidden="true" />
-                        Start modul
-                      </Button>
+                      <Video360Player videoUrl={module.video_url} />
                     ) : (
-                      <p className="text-sm text-muted-foreground italic">
-                        Videoinnhold kommer snart
-                      </p>
+                      <div className="bg-muted rounded-lg p-8 text-center">
+                        <Play className="h-12 w-12 text-muted-foreground mx-auto mb-4" aria-hidden="true" />
+                        <p className="text-sm text-muted-foreground italic">
+                          Videoinnhold kommer snart
+                        </p>
+                      </div>
+                    )}
+                    {module.content && (
+                      <div className="prose prose-sm max-w-none">
+                        <p className="whitespace-pre-wrap text-muted-foreground">{module.content}</p>
+                      </div>
                     )}
                   </CardContent>
                 </Card>
