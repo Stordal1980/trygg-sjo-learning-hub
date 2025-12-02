@@ -229,25 +229,36 @@ const Dashboard = () => {
                     <CardDescription>{course.description}</CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-2">
-                    {course.price_nok > 0 && (
-                      <p className="text-sm font-semibold">{course.price_nok} NOK</p>
+                    {course.price_nok > 0 && !isEnrolled(course.id) && (
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground">Pris:</span>
+                        <span className="font-semibold">{course.price_nok} NOK</span>
+                      </div>
                     )}
                     <Button
                       className="w-full"
-                      variant={isEnrolled(course.id) ? "secondary" : "default"}
+                      variant={isEnrolled(course.id) ? "secondary" : "outline"}
                       disabled={!isEnrolled(course.id) && course.price_nok > 0}
                       onClick={() => {
-                        if (isEnrolled(course.id)) {
+                        if (isEnrolled(course.id) || course.price_nok === 0) {
                           navigate(`/course/${course.id}`);
-                        } else if (course.price_nok > 0) {
-                          navigate(`/checkout?courseId=${course.id}`);
                         } else {
-                          navigate(`/course/${course.id}`);
+                          navigate(`/checkout?courseId=${course.id}`);
                         }
                       }}
                     >
-                      {isEnrolled(course.id) ? "Fortsett kurs" : course.price_nok > 0 ? "Kjøp tilgang" : "Se kurs"}
+                      {isEnrolled(course.id) ? "Fortsett kurs" : "Se kurs"}
                     </Button>
+                    {!isEnrolled(course.id) && course.price_nok > 0 && (
+                      <Button
+                        variant="default"
+                        size="sm"
+                        className="w-full"
+                        onClick={() => navigate(`/checkout?courseId=${course.id}`)}
+                      >
+                        Kjøp tilgang
+                      </Button>
+                    )}
                   </CardContent>
                 </Card>
               ))}
