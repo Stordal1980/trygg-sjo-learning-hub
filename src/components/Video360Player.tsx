@@ -1,9 +1,10 @@
 import { useRef, useState, useEffect } from "react";
-import { Canvas, useFrame, useThree } from "@react-three/fiber";
+import { Canvas } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
 import * as THREE from "three";
 import { Button } from "@/components/ui/button";
-import { Play, Pause, Volume2, VolumeX } from "lucide-react";
+import { Play, Pause, Volume2, VolumeX, Maximize, Minimize } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface Video360SphereProps {
   videoUrl: string;
@@ -71,11 +72,38 @@ interface Video360PlayerProps {
 }
 
 export function Video360Player({ videoUrl }: Video360PlayerProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  const toggleFullscreen = async () => {
+    if (!containerRef.current) return;
+    
+    if (!document.fullscreenElement) {
+      await containerRef.current.requestFullscreen();
+    } else {
+      await document.exitFullscreen();
+    }
+  };
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, []);
 
   return (
-    <div className="relative w-full h-[600px] bg-card rounded-lg overflow-hidden border">
+    <div 
+      ref={containerRef}
+      className={cn(
+        "relative bg-card overflow-hidden border",
+        isFullscreen ? "h-screen w-screen rounded-none" : "w-full h-[600px] rounded-lg"
+      )}
+    >
       <Canvas camera={{ position: [0, 0, 0.1], fov: 75 }}>
         <Video360Sphere videoUrl={videoUrl} isPlaying={isPlaying} isMuted={isMuted} />
         <OrbitControls
@@ -87,28 +115,41 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
         />
       </Canvas>
 
-      <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex gap-3 bg-background/80 backdrop-blur-sm p-3 rounded-lg border shadow-lg">
+      <div className={cn(
+        "absolute left-1/2 -translate-x-1/2 flex gap-3 bg-background/80 backdrop-blur-sm p-3 rounded-lg border shadow-lg",
+        isFullscreen ? "bottom-10" : "bottom-6"
+      )}>
         <Button
           size="icon"
           variant="outline"
           onClick={() => setIsPlaying(!isPlaying)}
-          className="h-10 w-10"
+          className={cn(isFullscreen ? "h-14 w-14" : "h-10 w-10")}
         >
-          {isPlaying ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5" />}
+          {isPlaying ? <Pause className={cn(isFullscreen ? "h-7 w-7" : "h-5 w-5")} /> : <Play className={cn(isFullscreen ? "h-7 w-7" : "h-5 w-5")} />}
         </Button>
         <Button
           size="icon"
           variant="outline"
           onClick={() => setIsMuted(!isMuted)}
-          className="h-10 w-10"
+          className={cn(isFullscreen ? "h-14 w-14" : "h-10 w-10")}
         >
-          {isMuted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
+          {isMuted ? <VolumeX className={cn(isFullscreen ? "h-7 w-7" : "h-5 w-5")} /> : <Volume2 className={cn(isFullscreen ? "h-7 w-7" : "h-5 w-5")} />}
+        </Button>
+        <Button
+          size="icon"
+          variant="outline"
+          onClick={toggleFullscreen}
+          className={cn(isFullscreen ? "h-14 w-14" : "h-10 w-10")}
+        >
+          {isFullscreen ? <Minimize className={cn(isFullscreen ? "h-7 w-7" : "h-5 w-5")} /> : <Maximize className={cn(isFullscreen ? "h-7 w-7" : "h-5 w-5")} />}
         </Button>
       </div>
 
-      <div className="absolute top-4 left-4 bg-background/80 backdrop-blur-sm px-4 py-2 rounded-lg border text-sm text-muted-foreground">
-        Dra for å se rundt • Scroll for zoom
-      </div>
+      {!isFullscreen && (
+        <div className="absolute top-4 left-4 bg-background/80 backdrop-blur-sm px-4 py-2 rounded-lg border text-sm text-muted-foreground">
+          Dra for å se rundt • Scroll for zoom
+        </div>
+      )}
     </div>
   );
 }
