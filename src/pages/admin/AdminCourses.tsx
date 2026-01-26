@@ -3,10 +3,20 @@ import { AdminLayout } from "@/components/admin/AdminLayout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
-import { Plus, Edit, Trash2 } from "lucide-react";
+import { Plus, Edit, Trash2, EyeOff } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 interface Course {
   id: string;
@@ -20,6 +30,9 @@ interface Course {
 export default function AdminCourses() {
   const [courses, setCourses] = useState<Course[]>([]);
   const [loading, setLoading] = useState(true);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [courseToDelete, setCourseToDelete] = useState<Course | null>(null);
+  const [hasRelatedData, setHasRelatedData] = useState(false);
   const { toast } = useToast();
   const navigate = useNavigate();
 
@@ -48,11 +61,71 @@ export default function AdminCourses() {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm("Er du sikker på at du vil slette dette kurset?")) return;
+  const checkRelatedData = async (courseId: string): Promise<boolean> => {
+    const { count: paymentsCount } = await supabase
+      .from("payments")
+      .select("*", { count: "exact", head: true })
+      .eq("course_id", courseId);
+
+    const { count: enrollmentsCount } = await supabase
+      .from("user_enrollments")
+      .select("*", { count: "exact", head: true })
+      .eq("course_id", courseId);
+
+    return (paymentsCount || 0) > 0 || (enrollmentsCount || 0) > 0;
+  };
+
+  const handleDeleteClick = async (course: Course) => {
+    setCourseToDelete(course);
+    const hasData = await checkRelatedData(course.id);
+    setHasRelatedData(hasData);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleUnpublish = async () => {
+    if (!courseToDelete) return;
 
     try {
-      const { error } = await supabase.from("courses").delete().eq("id", id);
+      const { error } = await supabase
+        .from("courses")
+        .update({ is_published: false })
+        .eq("id", courseToDelete.id);
+
+      if (error) throw error;
+
+      toast({
+        title: "Avpublisert",
+        description: "Kurset er nå avpublisert og skjult for brukere",
+      });
+      fetchCourses();
+    } catch (error) {
+      console.error("Error unpublishing course:", error);
+      toast({
+        title: "Feil",
+        description: "Kunne ikke avpublisere kurs",
+        variant: "destructive",
+      });
+    } finally {
+      setDeleteDialogOpen(false);
+      setCourseToDelete(null);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!courseToDelete) return;
+
+    try {
+      // First delete related modules
+      await supabase
+        .from("course_modules")
+        .delete()
+        .eq("course_id", courseToDelete.id);
+
+      const { error } = await supabase
+        .from("courses")
+        .delete()
+        .eq("id", courseToDelete.id);
+
       if (error) throw error;
 
       toast({
@@ -60,13 +133,25 @@ export default function AdminCourses() {
         description: "Kurset ble slettet",
       });
       fetchCourses();
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error deleting course:", error);
-      toast({
-        title: "Feil",
-        description: "Kunne ikke slette kurs",
-        variant: "destructive",
-      });
+      
+      if (error.code === "23503") {
+        toast({
+          title: "Kan ikke slette",
+          description: "Kurset har tilknyttede betalinger eller påmeldinger. Avpubliser kurset i stedet.",
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Feil",
+          description: "Kunne ikke slette kurs",
+          variant: "destructive",
+        });
+      }
+    } finally {
+      setDeleteDialogOpen(false);
+      setCourseToDelete(null);
     }
   };
 
@@ -121,7 +206,7 @@ export default function AdminCourses() {
                       <Button
                         size="sm"
                         variant="destructive"
-                        onClick={() => handleDelete(course.id)}
+                        onClick={() => handleDeleteClick(course)}
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
@@ -133,6 +218,42 @@ export default function AdminCourses() {
           </div>
         )}
       </div>
+
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {hasRelatedData ? "Kurset har tilknyttede data" : "Slett kurs"}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {hasRelatedData ? (
+                <>
+                  Dette kurset har betalinger eller påmeldinger knyttet til seg og kan ikke slettes permanent.
+                  Du kan avpublisere kurset slik at det ikke lenger er synlig for brukere.
+                </>
+              ) : (
+                <>
+                  Er du sikker på at du vil slette "{courseToDelete?.title}"? 
+                  Denne handlingen kan ikke angres.
+                </>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Avbryt</AlertDialogCancel>
+            {hasRelatedData ? (
+              <AlertDialogAction onClick={handleUnpublish}>
+                <EyeOff className="mr-2 h-4 w-4" />
+                Avpubliser
+              </AlertDialogAction>
+            ) : (
+              <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                Slett permanent
+              </AlertDialogAction>
+            )}
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </AdminLayout>
   );
 }
