@@ -1,97 +1,92 @@
 
-# Fix 360 Video Playback on PICO 4 Browser
+# Fiks 360 Video Avspilling på Eldre Enheter (iPad)
 
-## Problem
-The 360 video player shows a black screen on the PICO 4's native browser. This is caused by mobile browser restrictions on video playback and missing video texture update logic.
+## Problemanalyse
 
-## Solution Overview
-We'll fix the video player to work properly on VR browsers by:
-- Fixing video loading order and attributes
-- Adding proper video texture updates in the render loop
-- Handling autoplay restrictions with a muted-first approach
-- Adding user feedback for loading/error states
+Nyere enheter (Samsung S24 Ultra/Chrome) fungerer fint, mens eldre iPads viser svart skjerm og play-knappen reagerer ikke. Dette skyldes flere iOS-spesifikke begrensninger:
 
----
+### Identifiserte Problemer
 
-## Changes
+1. **Video-element ikke i DOM** - iOS Safari har problemer med video-elementer opprettet via `document.createElement()` som aldri legges til i dokumentet. iOS trenger ofte at video-elementet er synlig i DOM for å initialisere riktig.
 
-### 1. Update Video360Player.tsx
+2. **Play må kalles direkte fra bruker-event** - iOS krever at `video.play()` kalles synkront fra en bruker-interaksjon (touch/click), ikke fra en React state-endring som skjer asynkront.
 
-**Fix video initialization order:**
-- Set `crossOrigin` attribute before `src`
-- Start video muted by default (required for autoplay on mobile browsers)
-- Add `preload="auto"` for faster loading
+3. **Retry-funksjon fungerer ikke** - `handleRetry()` setter bare state tilbake, men video-elementet blir ikke faktisk re-opprettet siden `videoUrl` ikke endres.
 
-**Add texture update in render loop:**
-- Use `useFrame` hook from @react-three/fiber to update the video texture every frame
-- Set `texture.needsUpdate = true` on each render
-
-**Handle video events:**
-- Listen for `canplay`/`loadeddata` events to know when video is ready
-- Listen for `error` events to provide user feedback
-- Implement retry logic for failed autoplay
-
-**Add loading and error states:**
-- Show loading spinner while video is loading
-- Show error message if video fails to load
-- Provide a "tap to play" button for browsers that block autoplay
+4. **Manglende colorSpace for WebGL** - Noen iOS-versjoner trenger eksplisitt `colorSpace`-setting på teksturen.
 
 ---
 
-## Technical Details
+## Løsning
 
-### Modified Video360Sphere component:
+### 1. Legg til video-element i DOM (skjult)
+
+I stedet for bare å opprette video via JavaScript, legger vi video-elementet til i DOM-en (utenfor synsfeltet). Dette fikser iOS Safari sin video-initialisering.
+
+### 2. Direkte play fra touch event
+
+Endre arkitekturen slik at play-knappen direkte kaller `videoRef.current.play()` i samme event handler, ikke via state-endring.
+
+### 3. Legg til forceUpdate-key for retry
+
+Bruk en `key`-prop på Video360Sphere komponenten som endres ved retry, slik at hele komponenten re-mountes og videoen lastes på nytt.
+
+### 4. Forbedret iOS-deteksjon og fallback
+
+Legg til deteksjon av iOS-enheter og vis en tydeligere "Trykk for å starte" melding på første lasting.
+
+---
+
+## Tekniske Endringer
+
+### Video360Player.tsx - Hovedendringer
+
+| Endring | Beskrivelse |
+|---------|-------------|
+| Legg video i DOM | Opprett et skjult video-element i DOM via ref, ikke bare i minnet |
+| Direkte play-kall | Kall `video.play()` direkte fra onClick, ikke via state |
+| iOS auto-unmute | Etter første play, aktiver lyd automatisk |
+| Retry med key | Bruk state-key for å tvinge re-mount ved retry |
+| ColorSpace fix | Sett `texture.colorSpace = THREE.SRGBColorSpace` for eldre iOS |
+
+### Ny kode-struktur
 
 ```text
 +------------------------------------------+
-|  Video Element Setup (before src)        |
-|  - crossOrigin = "anonymous"             |
-|  - playsInline = true                    |
-|  - muted = true (initially for autoplay) |
-|  - loop = true                           |
-|  - preload = "auto"                      |
-|  - THEN set src                          |
+|  Video Element i DOM (visibility: hidden)|
+|  - Legges til i document.body            |
+|  - Fjernes ved unmount                   |
 +------------------------------------------+
            |
            v
 +------------------------------------------+
-|  Video Events                            |
-|  - onloadeddata: set ready state         |
-|  - oncanplay: attempt auto-play          |
-|  - onerror: set error state              |
+|  Play-knapp onClick                      |
+|  - Kaller video.play() DIREKTE           |
+|  - Deretter oppdaterer React state       |
 +------------------------------------------+
            |
            v
 +------------------------------------------+
-|  useFrame Hook                           |
-|  - Check if video is playing             |
-|  - Set texture.needsUpdate = true        |
+|  VideoTexture                            |
+|  - colorSpace = SRGBColorSpace           |
+|  - needsUpdate = true per frame          |
 +------------------------------------------+
 ```
 
-### New state management in parent component:
-- `isVideoReady` - tracks when video can play
-- `hasError` - tracks if video failed to load
-- `showTapToPlay` - shows manual play button if autoplay blocked
+---
 
-### UI Additions:
-- Loading overlay with spinner while video loads
-- Error overlay with retry button if loading fails
-- "Tap to play" button for autoplay-blocked scenarios
+## Filer som Endres
+
+| Fil | Endringer |
+|-----|-----------|
+| `src/components/Video360Player.tsx` | Legge video i DOM, direkte play fra event, iOS-håndtering, retry med key |
 
 ---
 
-## Files to Modify
+## Oppsummering
 
-| File | Changes |
-|------|---------|
-| `src/components/Video360Player.tsx` | Complete refactor of video loading, add useFrame for texture updates, add loading/error states |
-
----
-
-## Summary
-This fix addresses the core issues preventing 360 video playback on PICO 4:
-1. Correct attribute ordering for cross-origin video
-2. Frame-by-frame texture updates for WebGL rendering
-3. Mobile/VR browser autoplay restrictions handled with muted-first approach
-4. User feedback for loading and error states
+Disse endringene vil løse iPad-problemet ved å:
+1. Sikre at video-elementet er i DOM (kreves av iOS Safari)
+2. Kalle `play()` synkront fra bruker-touch (iOS krav)
+3. Fikse retry-funksjonalitet med komponent re-mount
+4. Legge til iOS-spesifikke tekstur-innstillinger
