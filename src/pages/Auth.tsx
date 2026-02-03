@@ -89,7 +89,7 @@ const Auth = () => {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <form onSubmit={handleAuth} className="space-y-4">
+            <form onSubmit={handleAuth} className="space-y-4" autoComplete="on">
               {!isLogin && (
                 <div className="space-y-2">
                   <Label htmlFor="fullName">Fullt navn</Label>
@@ -101,6 +101,7 @@ const Auth = () => {
                     onChange={(e) => setFullName(e.target.value)}
                     required={!isLogin}
                     aria-required={!isLogin}
+                    autoComplete="name"
                   />
                 </div>
               )}
@@ -115,6 +116,7 @@ const Auth = () => {
                   onChange={(e) => setEmail(e.target.value)}
                   required
                   aria-required="true"
+                  autoComplete="email"
                 />
               </div>
 
@@ -129,6 +131,7 @@ const Auth = () => {
                   required
                   minLength={6}
                   aria-required="true"
+                  autoComplete={isLogin ? "current-password" : "new-password"}
                 />
               </div>
 
