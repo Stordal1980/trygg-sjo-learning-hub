@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Upload } from "lucide-react";
+import { ArrowLeft, Youtube } from "lucide-react";
 
 export default function AdminModuleEdit() {
   const { courseId, moduleId } = useParams();
@@ -17,7 +17,7 @@ export default function AdminModuleEdit() {
   const isNew = moduleId === "new";
 
   const [loading, setLoading] = useState(false);
-  const [uploading, setUploading] = useState(false);
+  
   const [formData, setFormData] = useState({
     title: "",
     description: "",
@@ -52,43 +52,7 @@ export default function AdminModuleEdit() {
     }
   };
 
-  const handleVideoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    setUploading(true);
-    try {
-      const fileExt = file.name.split(".").pop();
-      const fileName = `${Math.random()}.${fileExt}`;
-      const filePath = `${courseId}/${fileName}`;
-
-      const { error: uploadError } = await supabase.storage
-        .from("course-videos")
-        .upload(filePath, file);
-
-      if (uploadError) throw uploadError;
-
-      const { data: { publicUrl } } = supabase.storage
-        .from("course-videos")
-        .getPublicUrl(filePath);
-
-      setFormData({ ...formData, video_url: publicUrl });
-
-      toast({
-        title: "Lastet opp",
-        description: "Video ble lastet opp",
-      });
-    } catch (error) {
-      console.error("Error uploading video:", error);
-      toast({
-        title: "Feil",
-        description: "Kunne ikke laste opp video",
-        variant: "destructive",
-      });
-    } finally {
-      setUploading(false);
-    }
-  };
+  
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -196,26 +160,23 @@ export default function AdminModuleEdit() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="video">360° Video</Label>
-                <div className="flex gap-2">
+                <Label htmlFor="video_url">YouTube Video-URL</Label>
+                <div className="flex items-center gap-2">
+                  <Youtube className="h-5 w-5 text-muted-foreground shrink-0" />
                   <Input
-                    id="video-upload"
-                    type="file"
-                    accept="video/*"
-                    onChange={handleVideoUpload}
-                    disabled={uploading}
-                    className="flex-1"
+                    id="video_url"
+                    type="url"
+                    placeholder="https://www.youtube.com/watch?v=..."
+                    value={formData.video_url || ""}
+                    onChange={(e) => setFormData({ ...formData, video_url: e.target.value })}
                   />
-                  {uploading && <span className="text-sm text-muted-foreground">Laster opp...</span>}
                 </div>
-                {formData.video_url && (
-                  <p className="text-sm text-muted-foreground">
-                    Video lastet opp ✓
-                  </p>
-                )}
+                <p className="text-sm text-muted-foreground">
+                  Lim inn en YouTube-lenke (støtter 360° videoer)
+                </p>
               </div>
 
-              <Button type="submit" disabled={loading || uploading}>
+              <Button type="submit" disabled={loading}>
                 {loading ? "Lagrer..." : "Lagre"}
               </Button>
             </form>
