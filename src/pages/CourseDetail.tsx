@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { useToast } from "@/hooks/use-toast";
 import { Anchor, ArrowLeft, Play, CheckCircle2, Lock } from "lucide-react";
 import type { User } from "@supabase/supabase-js";
-import { Video360Player } from "@/components/Video360Player";
+import { YouTube360Player } from "@/components/YouTube360Player";
 import { useEnrollmentCheck } from "@/hooks/useEnrollmentCheck";
 
 interface Course {
@@ -239,7 +239,7 @@ const CourseDetail = () => {
                   </CardHeader>
                   <CardContent className="space-y-4">
                     {module.video_url ? (
-                      <Video360Player videoUrl={module.video_url} />
+                      <YouTube360Player videoUrl={module.video_url} />
                     ) : (
                       <div className="bg-muted rounded-lg p-8 text-center">
                         <Play className="h-12 w-12 text-muted-foreground mx-auto mb-4" aria-hidden="true" />
