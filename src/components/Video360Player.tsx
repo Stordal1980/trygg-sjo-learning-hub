@@ -1,4 +1,6 @@
 import { useRef, useEffect, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Play, Square } from "lucide-react";
 
 interface Video360PlayerProps {
   videoUrl: string;
@@ -24,6 +26,7 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
   const videosphereRef = useRef<any>(null);
   const sceneRef = useRef<any>(null);
   const [aframeLoaded, setAframeLoaded] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
   const [debugInfo, setDebugInfo] = useState<DebugInfo>({
     state: "init",
     time: 0,
@@ -184,8 +187,8 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
     video.id = "vid360";
     video.crossOrigin = "anonymous";
     video.src = videoUrl;
-    video.setAttribute("autoplay", "");
-    video.setAttribute("muted", "");
+    // No autoplay - controlled by play button
+    video.setAttribute("playsinline", "");
     video.setAttribute("playsinline", "");
     video.setAttribute("webkit-playsinline", "");
     video.setAttribute("loop", "true");
@@ -226,9 +229,7 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
 
     scene.addEventListener("loaded", () => {
       setDebugInfo((d) => ({ ...d, sceneLoaded: true }));
-      setTimeout(() => {
-        video.play().catch((e) => console.warn("Autoplay failed:", e));
-      }, 100);
+      // Don't autoplay - wait for user to click play button
     });
 
     const handleInteraction = () => {
@@ -249,6 +250,24 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
       }
     };
   }, [aframeLoaded, videoUrl]);
+
+  const handlePlayStop = () => {
+    const video = videoRef.current;
+    if (!video) return;
+    if (isPlaying) {
+      video.pause();
+      video.currentTime = 0;
+      video.muted = true;
+      setIsPlaying(false);
+    } else {
+      video.muted = false;
+      video.play().then(() => setIsPlaying(true)).catch((e) => {
+        // Try muted first if unmuted play fails
+        video.muted = true;
+        video.play().then(() => setIsPlaying(true)).catch(() => {});
+      });
+    }
+  };
 
   return (
     <div>
@@ -276,6 +295,17 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
         className="w-full rounded-lg overflow-hidden"
         style={{ height: "400px" }}
       />
+      <Button
+        onClick={handlePlayStop}
+        variant={isPlaying ? "destructive" : "default"}
+        className="mt-3 w-full"
+      >
+        {isPlaying ? (
+          <><Square className="h-4 w-4 mr-2" /> Stopp video</>
+        ) : (
+          <><Play className="h-4 w-4 mr-2" /> Spill av video</>
+        )}
+      </Button>
     </div>
   );
 }
