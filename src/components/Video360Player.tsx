@@ -1,5 +1,5 @@
 import { useRef, useState, useEffect, useCallback, useMemo } from "react";
-import { Canvas, useFrame } from "@react-three/fiber";
+import { Canvas } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
 import { XR, createXRStore } from "@react-three/xr";
 import * as THREE from "three";
@@ -24,44 +24,33 @@ interface Video360SphereProps {
 }
 
 function Video360Sphere({ videoElement }: Video360SphereProps) {
-  const meshRef = useRef<THREE.Mesh>(null);
-  const textureRef = useRef<THREE.VideoTexture | null>(null);
-
-  useEffect(() => {
-    if (!videoElement) return;
-
+  // Create texture exactly like the official Three.js example:
+  // `new THREE.MeshBasicMaterial( { map: texture } )` — passed at construction time
+  const texture = useMemo(() => {
+    if (!videoElement) return null;
     const tex = new THREE.VideoTexture(videoElement);
     tex.colorSpace = THREE.SRGBColorSpace;
-    textureRef.current = tex;
-
-    if (meshRef.current) {
-      (meshRef.current.material as THREE.MeshBasicMaterial).map = tex;
-      (meshRef.current.material as THREE.MeshBasicMaterial).needsUpdate = true;
-    }
-
-    return () => {
-      tex.dispose();
-      textureRef.current = null;
-    };
+    return tex;
   }, [videoElement]);
 
-  // Force texture update every frame
-  useFrame(() => {
-    if (textureRef.current && videoElement && videoElement.readyState >= videoElement.HAVE_CURRENT_DATA) {
-      textureRef.current.needsUpdate = true;
-    }
-  });
+  // Clean up texture on unmount
+  useEffect(() => {
+    return () => { texture?.dispose(); };
+  }, [texture]);
 
-  // Geometry scaled on x-axis so faces point inward (same as official example)
+  // Geometry: invert on x-axis so faces point inward (official example)
   const geometry = useMemo(() => {
     const geo = new THREE.SphereGeometry(5, 60, 40);
     geo.scale(-1, 1, 1);
     return geo;
   }, []);
 
+  if (!texture) return null;
+
+  // Match official example: material created WITH map, not set imperatively
   return (
-    <mesh ref={meshRef} geometry={geometry}>
-      <meshBasicMaterial side={THREE.FrontSide} />
+    <mesh geometry={geometry}>
+      <meshBasicMaterial map={texture} />
     </mesh>
   );
 }
