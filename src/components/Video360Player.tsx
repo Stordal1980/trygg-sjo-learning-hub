@@ -7,15 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, Loader2, RefreshCw, Glasses, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-// --- Browser detection ---
-function isSamsungInternet(): boolean {
-  return /SamsungBrowser/i.test(navigator.userAgent);
-}
-
 // --- WebGL support detection ---
 function isWebGLSupported(): boolean {
-  // Samsung Internet has WebGL but fails to render VideoTexture (black screen with audio)
-  if (isSamsungInternet()) return false;
   try {
     const canvas = document.createElement("canvas");
     const gl = canvas.getContext("webgl2") || canvas.getContext("webgl") || canvas.getContext("experimental-webgl");
@@ -314,6 +307,7 @@ function Video360CanvasPlayer({ videoUrl, onWebGLError }: Video360CanvasPlayerPr
     >
       <Canvas
         key={retryKey}
+        gl={{ preserveDrawingBuffer: true, alpha: false }}
         camera={{ position: [0, 0, 0.1], fov: 75 }}
         onCreated={({ gl }) => {
           // Detect WebGL context loss and fall back
