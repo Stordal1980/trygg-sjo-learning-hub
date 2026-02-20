@@ -171,12 +171,12 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
   }, [aframeLoaded, videoUrl]);
 
   return (
-    <div
-      ref={containerRef}
-      className="w-full rounded-lg overflow-hidden"
-      style={{ height: "400px", position: "relative" }}
-    >
-      {/* Debug overlay */}
+    <div style={{ position: "relative", width: "100%", height: "400px" }} className="rounded-lg overflow-hidden">
+      <div
+        ref={containerRef}
+        style={{ width: "100%", height: "100%" }}
+      />
+      {/* Debug overlay - outside containerRef so innerHTML="" doesn't remove it */}
       <div
         style={{
           position: "absolute",
