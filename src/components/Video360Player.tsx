@@ -174,25 +174,26 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
     <div style={{ position: "relative", width: "100%", height: "400px" }} className="rounded-lg overflow-hidden">
       <div
         ref={containerRef}
-        style={{ width: "100%", height: "100%" }}
+        style={{ width: "100%", height: "100%", position: "absolute", top: 0, left: 0 }}
       />
-      {/* Debug overlay - outside containerRef so innerHTML="" doesn't remove it */}
+      {/* Debug overlay - must be AFTER containerRef in DOM order AND have very high z-index to sit above a-scene */}
       <div
         style={{
           position: "absolute",
           top: 8,
           left: 8,
-          zIndex: 9999,
-          background: "rgba(0,0,0,0.75)",
+          zIndex: 2147483647,
+          background: "rgba(0,0,0,0.85)",
           color: "#0f0",
           fontFamily: "monospace",
-          fontSize: "11px",
-          padding: "8px 10px",
+          fontSize: "12px",
+          padding: "10px 12px",
           borderRadius: "6px",
-          lineHeight: 1.5,
+          lineHeight: 1.6,
           pointerEvents: "none",
           maxWidth: "90%",
           wordBreak: "break-all",
+          isolation: "isolate",
         }}
       >
         <div><b>State:</b> {debugInfo.state}</div>
