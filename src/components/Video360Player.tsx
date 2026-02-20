@@ -1,9 +1,10 @@
 import { useRef, useState, useEffect, useCallback } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
+import { XR, createXRStore } from "@react-three/xr";
 import * as THREE from "three";
 import { Button } from "@/components/ui/button";
-import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, Loader2, RefreshCw } from "lucide-react";
+import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, Loader2, RefreshCw, Glasses } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface Video360SphereProps {
@@ -57,6 +58,8 @@ interface Video360PlayerProps {
   videoUrl: string;
 }
 
+const xrStore = createXRStore();
+
 export function Video360Player({ videoUrl }: Video360PlayerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const videoContainerRef = useRef<HTMLDivElement>(null);
@@ -71,6 +74,14 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
   const [showInitialPlay, setShowInitialPlay] = useState(true);
   const [videoReady, setVideoReady] = useState(false);
   const [retryKey, setRetryKey] = useState(0);
+  const [vrSupported, setVrSupported] = useState(false);
+
+  // Check WebXR VR support
+  useEffect(() => {
+    navigator.xr?.isSessionSupported('immersive-vr')
+      .then(supported => setVrSupported(supported))
+      .catch(() => setVrSupported(false));
+  }, []);
 
   // Create video element in DOM (required for iOS Safari)
   useEffect(() => {
@@ -240,14 +251,16 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
       )}
     >
       <Canvas key={retryKey} camera={{ position: [0, 0, 0.1], fov: 75 }}>
-        <Video360Sphere videoElement={videoReady ? videoRef.current : null} />
-        <OrbitControls
-          enableZoom={true}
-          enablePan={false}
-          rotateSpeed={-0.5}
-          minDistance={0.1}
-          maxDistance={100}
-        />
+        <XR store={xrStore}>
+          <Video360Sphere videoElement={videoReady ? videoRef.current : null} />
+          <OrbitControls
+            enableZoom={true}
+            enablePan={false}
+            rotateSpeed={-0.5}
+            minDistance={0.1}
+            maxDistance={100}
+          />
+        </XR>
       </Canvas>
 
       {/* Loading overlay */}
@@ -319,6 +332,17 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
         >
           {isFullscreen ? <Minimize className={cn(isFullscreen ? "h-7 w-7" : "h-5 w-5")} /> : <Maximize className={cn(isFullscreen ? "h-7 w-7" : "h-5 w-5")} />}
         </Button>
+        {vrSupported && (
+          <Button
+            size="icon"
+            variant="outline"
+            onClick={() => xrStore.enterVR()}
+            className={cn(isFullscreen ? "h-14 w-14" : "h-10 w-10")}
+            title="Enter VR"
+          >
+            <Glasses className={cn(isFullscreen ? "h-7 w-7" : "h-5 w-5")} />
+          </Button>
+        )}
       </div>
 
       {!isFullscreen && !isLoading && !hasError && !showInitialPlay && (
