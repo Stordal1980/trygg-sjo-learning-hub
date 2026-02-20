@@ -25,20 +25,32 @@ interface Video360SphereProps {
 
 function Video360Sphere({ videoElement }: Video360SphereProps) {
   const meshRef = useRef<THREE.Mesh>(null);
-  const [texture, setTexture] = useState<THREE.VideoTexture | null>(null);
+  const textureRef = useRef<THREE.VideoTexture | null>(null);
 
   useEffect(() => {
     if (!videoElement) return;
 
     const tex = new THREE.VideoTexture(videoElement);
     tex.colorSpace = THREE.SRGBColorSpace;
-    setTexture(tex);
+    textureRef.current = tex;
+
+    if (meshRef.current) {
+      (meshRef.current.material as THREE.MeshBasicMaterial).map = tex;
+      (meshRef.current.material as THREE.MeshBasicMaterial).needsUpdate = true;
+    }
 
     return () => {
       tex.dispose();
-      setTexture(null);
+      textureRef.current = null;
     };
   }, [videoElement]);
+
+  // Force texture update every frame
+  useFrame(() => {
+    if (textureRef.current && videoElement && videoElement.readyState >= videoElement.HAVE_CURRENT_DATA) {
+      textureRef.current.needsUpdate = true;
+    }
+  });
 
   // Geometry scaled on x-axis so faces point inward (same as official example)
   const geometry = useMemo(() => {
@@ -49,7 +61,7 @@ function Video360Sphere({ videoElement }: Video360SphereProps) {
 
   return (
     <mesh ref={meshRef} geometry={geometry}>
-      <meshBasicMaterial map={texture} />
+      <meshBasicMaterial side={THREE.FrontSide} />
     </mesh>
   );
 }
