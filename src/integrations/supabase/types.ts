@@ -54,6 +54,7 @@ export type Database = {
           order_index: number
           title: string
           updated_at: string
+          video_type: string
           video_url: string | null
         }
         Insert: {
@@ -65,6 +66,7 @@ export type Database = {
           order_index?: number
           title: string
           updated_at?: string
+          video_type?: string
           video_url?: string | null
         }
         Update: {
@@ -76,6 +78,7 @@ export type Database = {
           order_index?: number
           title?: string
           updated_at?: string
+          video_type?: string
           video_url?: string | null
         }
         Relationships: [
