@@ -38,12 +38,19 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
     const video = document.createElement("video");
     video.id = "vid360";
     video.src = videoUrl;
-    video.setAttribute("crossorigin", "anonymous");
+    video.setAttribute("autoplay", "");
+    video.setAttribute("muted", "");
     video.setAttribute("playsinline", "");
     video.setAttribute("webkit-playsinline", "");
-    video.loop = true;
+    video.setAttribute("loop", "true");
+    video.setAttribute("crossorigin", "anonymous");
     video.muted = true;
     video.preload = "auto";
+
+    video.addEventListener("loadeddata", () => {
+      console.log("360 video loaded successfully");
+    });
+
     assets.appendChild(video);
     scene.appendChild(assets);
 
@@ -60,9 +67,13 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
 
     container.appendChild(scene);
 
-    // Auto-play on click/tap
+    // Start video when scene is loaded (muted autoplay is allowed)
+    scene.addEventListener("loaded", () => {
+      video.play().catch((e) => console.warn("Autoplay failed:", e));
+    });
+
+    // Click/tap to unmute only
     const handleInteraction = () => {
-      video.play().catch(() => {});
       video.muted = false;
     };
     scene.addEventListener("click", handleInteraction, { once: true });
