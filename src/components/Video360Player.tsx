@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect, useCallback } from "react";
+import { useRef, useState, useEffect, useCallback, useMemo } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
 import { XR, createXRStore } from "@react-three/xr";
@@ -25,41 +25,31 @@ interface Video360SphereProps {
 
 function Video360Sphere({ videoElement }: Video360SphereProps) {
   const meshRef = useRef<THREE.Mesh>(null);
-  const textureRef = useRef<THREE.VideoTexture | null>(null);
+  const [texture, setTexture] = useState<THREE.VideoTexture | null>(null);
 
   useEffect(() => {
     if (!videoElement) return;
 
-    const texture = new THREE.VideoTexture(videoElement);
-    texture.minFilter = THREE.LinearFilter;
-    texture.magFilter = THREE.LinearFilter;
-    texture.format = THREE.RGBAFormat;
-    texture.generateMipmaps = false;
-    texture.colorSpace = THREE.SRGBColorSpace;
-    textureRef.current = texture;
-
-    if (meshRef.current) {
-      (meshRef.current.material as THREE.MeshBasicMaterial).map = texture;
-      (meshRef.current.material as THREE.MeshBasicMaterial).needsUpdate = true;
-    }
+    const tex = new THREE.VideoTexture(videoElement);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    setTexture(tex);
 
     return () => {
-      texture.dispose();
-      textureRef.current = null;
+      tex.dispose();
+      setTexture(null);
     };
   }, [videoElement]);
 
-  useFrame(() => {
-    const texture = textureRef.current;
-    if (videoElement && texture && videoElement.readyState >= videoElement.HAVE_CURRENT_DATA) {
-      texture.needsUpdate = true;
-    }
-  });
+  // Geometry scaled on x-axis so faces point inward (same as official example)
+  const geometry = useMemo(() => {
+    const geo = new THREE.SphereGeometry(5, 60, 40);
+    geo.scale(-1, 1, 1);
+    return geo;
+  }, []);
 
   return (
-    <mesh ref={meshRef} scale={[-1, 1, 1]}>
-      <sphereGeometry args={[500, 60, 40]} />
-      <meshBasicMaterial side={THREE.BackSide} />
+    <mesh ref={meshRef} geometry={geometry}>
+      <meshBasicMaterial map={texture} />
     </mesh>
   );
 }
@@ -307,8 +297,7 @@ function Video360CanvasPlayer({ videoUrl, onWebGLError }: Video360CanvasPlayerPr
     >
       <Canvas
         key={retryKey}
-        gl={{ preserveDrawingBuffer: true, alpha: false }}
-        camera={{ position: [0, 0, 0.1], fov: 75 }}
+        camera={{ position: [0, 0, 0.1], fov: 75, near: 0.25, far: 10 }}
         onCreated={({ gl }) => {
           // Detect WebGL context loss and fall back
           const canvas = gl.domElement;
