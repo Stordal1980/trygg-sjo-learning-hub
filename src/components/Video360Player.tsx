@@ -1,50 +1,88 @@
-import { useRef, useEffect } from "react";
-import videojs from "video.js";
-import "video.js/dist/video-js.css";
-import "videojs-vr/dist/videojs-vr.css";
-import "videojs-vr";
+import { useRef, useEffect, useState } from "react";
 
 interface Video360PlayerProps {
   videoUrl: string;
 }
 
 export function Video360Player({ videoUrl }: Video360PlayerProps) {
-  const videoRef = useRef<HTMLDivElement>(null);
-  const playerRef = useRef<ReturnType<typeof videojs> | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [aframeLoaded, setAframeLoaded] = useState(false);
+
+  // Load A-Frame dynamically (it registers global custom elements)
+  useEffect(() => {
+    if ((window as any).AFRAME) {
+      setAframeLoaded(true);
+      return;
+    }
+
+    import("aframe").then(() => {
+      setAframeLoaded(true);
+    });
+  }, []);
 
   useEffect(() => {
-    if (!videoRef.current) return;
+    if (!aframeLoaded || !containerRef.current) return;
 
-    const videoElement = document.createElement("video-js");
-    videoElement.classList.add("vjs-big-play-centered", "vjs-fluid");
-    videoRef.current.appendChild(videoElement);
+    const container = containerRef.current;
 
-    const player = videojs(videoElement, {
-      controls: true,
-      autoplay: false,
-      preload: "auto",
-      loop: true,
-      muted: true,
-      sources: [{ src: videoUrl, type: "video/mp4" }],
-    });
+    // Clear previous scene
+    container.innerHTML = "";
 
-    // Initialize 360/VR plugin after player is ready
-    player.ready(() => {
-      (player as any).vr({ projection: "equirectangular" });
-    });
-    playerRef.current = player;
+    // Build a-scene with videosphere
+    const scene = document.createElement("a-scene");
+    scene.setAttribute("embedded", "");
+    scene.setAttribute("vr-mode-ui", "enabled: true");
+    scene.setAttribute("loading-screen", "enabled: false");
+
+    const assets = document.createElement("a-assets");
+    const video = document.createElement("video");
+    video.id = "vid360";
+    video.src = videoUrl;
+    video.setAttribute("crossorigin", "anonymous");
+    video.setAttribute("playsinline", "");
+    video.setAttribute("webkit-playsinline", "");
+    video.loop = true;
+    video.muted = true;
+    video.preload = "auto";
+    assets.appendChild(video);
+    scene.appendChild(assets);
+
+    const videosphere = document.createElement("a-videosphere");
+    videosphere.setAttribute("src", "#vid360");
+    videosphere.setAttribute("rotation", "0 -90 0");
+    scene.appendChild(videosphere);
+
+    // Camera with look controls for drag/touch interaction
+    const camera = document.createElement("a-camera");
+    camera.setAttribute("look-controls", "reverseMouseDrag: true");
+    camera.setAttribute("wasd-controls", "enabled: false");
+    scene.appendChild(camera);
+
+    container.appendChild(scene);
+
+    // Auto-play on click/tap
+    const handleInteraction = () => {
+      video.play().catch(() => {});
+      video.muted = false;
+    };
+    scene.addEventListener("click", handleInteraction, { once: true });
 
     return () => {
-      if (playerRef.current) {
-        playerRef.current.dispose();
-        playerRef.current = null;
+      scene.removeEventListener("click", handleInteraction);
+      // Dispose a-scene
+      if (scene.parentNode) {
+        const sceneEl = scene as any;
+        if (sceneEl.destroy) sceneEl.destroy();
+        scene.remove();
       }
     };
-  }, [videoUrl]);
+  }, [aframeLoaded, videoUrl]);
 
   return (
-    <div className="w-full rounded-lg overflow-hidden">
-      <div ref={videoRef} />
-    </div>
+    <div
+      ref={containerRef}
+      className="w-full rounded-lg overflow-hidden"
+      style={{ height: "400px", position: "relative" }}
+    />
   );
 }

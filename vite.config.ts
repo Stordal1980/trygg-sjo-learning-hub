@@ -14,9 +14,5 @@ export default defineConfig(({ mode }) => ({
     alias: {
       "@": path.resolve(__dirname, "./src"),
     },
-    dedupe: ["video.js"],
-  },
-  optimizeDeps: {
-    include: ["video.js", "videojs-vr"],
   },
 }));
