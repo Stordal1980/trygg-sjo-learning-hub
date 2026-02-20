@@ -1,112 +1,57 @@
 
 
-# Bytt 360-videospiller til Video.js + videojs-vr
+# Fix: Sort skjerm i Samsung Internet for A-Frame 360-video
 
-## Hvorfor dette er en god ide
-Den navaerende Three.js-spilleren (via React Three Fiber) har vedvarende problemer med svart skjerm i Samsung Internet. `videojs-vr` er et offisielt Video.js-plugin som haandterer 360-video paa tvers av nettlesere -- inkludert Samsung Internet, Chrome, Safari og Firefox. Den bruker Three.js internt, men tar seg av alle kompatibilitetsproblemene automatisk.
+## Problem
+Samsung Internet (og andre mobile nettlesere) blokkerer autoplay av video uten brukerinteraksjon. Den navaerende implementasjonen setter `video.muted = true` men mangler `autoplay`-attributtet pa video-elementet, og starter ikke avspilling tidlig nok.
 
-## Hva som endres
+## Losning
+Oppdatere `Video360Player.tsx` med disse endringene:
 
-### 1. Nye avhengigheter
-- `video.js` -- den mest brukte HTML5-videospilleren
-- `videojs-vr` -- offisielt 360/VR-plugin med WebXR-stoette
+### 1. Legg til manglende video-attributter
+- Sett `autoplay` attributt pa video-elementet
+- Sikre at `playsinline` er korrekt satt
+- Legg til `loop="true"` som attributt (ikke bare property)
 
-### 2. Fjerne unnoedvendige avhengigheter
-Disse kan fjernes da de kun ble brukt av den gamle 360-spilleren:
-- `@react-three/fiber`
-- `@react-three/drei`
-- `@react-three/xr`
-- `three`
+### 2. Start video eksplisitt etter scene er klar
+- Lytt pa A-Frame `loaded`-event for a starte video
+- Legg til `loadeddata`-event pa video for debugging
+- Kall `video.play()` sa snart scenen er klar (mens video er muted, noe som er tillatt uten brukerinteraksjon)
 
-### 3. Ny `Video360Player.tsx`
-Erstatte hele komponenten med en Video.js-basert spiller:
-- Opprette et standard `<video>` element
-- Initialisere Video.js med `videojs-vr` plugin
-- Konfigurere `projection: 'equirectangular'` for 360-video
-- WebXR/VR-stoette kommer innebygd i pluginen
-- Beholde fullskjerm-knapp og muted/unmute-funksjonalitet
-- Beholde fallback-logikk for enheter uten WebGL
+### 3. Forbedret brukerinteraksjon for unmute
+- Behold klikk-handler for unmute, men flytt `video.play()` til scene-load
+- Vis en visuell "Trykk for lyd"-indikator over videoen
 
-### 4. Ingen endring i YouTube-spilleren
-`YouTube360Player.tsx` forblir uendret -- den bruker iframe og er helt uavhengig.
+## Teknisk detalj
 
-### 5. Ingen endring i `CourseDetail.tsx`
-Samme komponent-grensesnitt (`videoUrl` prop) saa kurssiden trenger ingen endring.
+Endringer i `src/components/Video360Player.tsx`:
 
-## Brukeropplevelse
-- Paa desktop: Dra for aa se rundt, scroll for zoom, fullskjerm
-- Paa mobil (inkl. Samsung Internet): Touch for aa dra, pinch-zoom, fullskjerm
-- Paa VR-briller: Innebygd WebXR-stoette via videojs-vr
-
----
-
-## Tekniske detaljer
-
-**Nye avhengigheter:**
 ```
-video.js (videospiller-rammeverk)
-videojs-vr (360/VR-plugin)
-```
+// Video-element far disse attributtene:
+video.setAttribute("autoplay", "");
+video.setAttribute("muted", "");
+video.setAttribute("playsinline", "");
+video.setAttribute("webkit-playsinline", "");
+video.setAttribute("loop", "true");
+video.setAttribute("crossorigin", "anonymous");
+video.muted = true;
 
-**Fjernes:**
-```
-@react-three/fiber
-@react-three/drei
-@react-three/xr
-three
+// Etter scene er lagt til DOM, start video eksplisitt:
+scene.addEventListener("loaded", () => {
+  video.play().catch(() => {});
+});
+
+// Debugging: sjekk om video faktisk laster
+video.addEventListener("loadeddata", () => {
+  console.log("360 video loaded successfully");
+});
+
+// Klikk-handler endres til bare unmute (play skjer allerede):
+const handleInteraction = () => {
+  video.muted = false;
+};
 ```
 
-**Ny implementasjon i `Video360Player.tsx`:**
-
-```tsx
-import { useRef, useEffect, useState, useCallback } from "react";
-import videojs from "video.js";
-import "video.js/dist/video-js.css";
-import "videojs-vr/dist/videojs-vr.css";
-import "videojs-vr";
-
-export function Video360Player({ videoUrl }: { videoUrl: string }) {
-  const videoRef = useRef<HTMLDivElement>(null);
-  const playerRef = useRef<any>(null);
-
-  useEffect(() => {
-    const videoElement = document.createElement("video-js");
-    videoElement.classList.add("vjs-big-play-centered", "vjs-fluid");
-    videoRef.current?.appendChild(videoElement);
-
-    const player = videojs(videoElement, {
-      controls: true,
-      autoplay: false,
-      preload: "auto",
-      loop: true,
-      muted: true,
-      sources: [{ src: videoUrl, type: "video/mp4" }],
-    });
-
-    player.vr({ projection: "equirectangular" });
-    playerRef.current = player;
-
-    return () => {
-      if (playerRef.current) {
-        playerRef.current.dispose();
-        playerRef.current = null;
-      }
-    };
-  }, [videoUrl]);
-
-  return (
-    <div className="w-full rounded-lg overflow-hidden">
-      <div ref={videoRef} />
-    </div>
-  );
-}
-```
-
-**Filer som endres:**
-- `src/components/Video360Player.tsx` -- fullstendig omskrevet med Video.js
-- `package.json` -- nye avhengigheter, fjerne gamle
-
-**Filer som IKKE endres:**
-- `src/components/YouTube360Player.tsx`
-- `src/pages/CourseDetail.tsx`
+### Fil som endres
+- `src/components/Video360Player.tsx`
 
