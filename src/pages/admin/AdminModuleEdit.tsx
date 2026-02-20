@@ -289,7 +289,7 @@ export default function AdminModuleEdit() {
                   )}
                   {formData.video_url && !uploading && (
                     <p className="text-sm text-muted-foreground">
-                      ✓ Video lastet opp
+                      ✓ Video lastet opp: <span className="font-medium text-foreground">{decodeURIComponent(formData.video_url.split("/").pop() || "")}</span>
                     </p>
                   )}
                   <p className="text-sm text-muted-foreground">
