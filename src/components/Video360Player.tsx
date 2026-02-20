@@ -28,8 +28,10 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
       sources: [{ src: videoUrl, type: "video/mp4" }],
     });
 
-    // Initialize 360/VR plugin
-    (player as any).vr({ projection: "equirectangular" });
+    // Initialize 360/VR plugin after player is ready
+    player.ready(() => {
+      (player as any).vr({ projection: "equirectangular" });
+    });
     playerRef.current = player;
 
     return () => {
