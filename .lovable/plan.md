@@ -1,50 +1,68 @@
 
+# Legg til WebXR/VR-stotte i 360-videospilleren
 
-# Videotype-velger i admin modulredigering
+## Hva dette gir
+Brukere med VR-briller (som PICO 4, Meta Quest) vil kunne trykke "Enter VR" og oppleve 360-videoen med hodestyring -- de ser seg rundt naturlig ved aa bevege hodet, i stedet for aa dra med fingeren.
 
-## Oversikt
-Legge til en velger i admin-modulredigeringen der admin kan velge mellom to videokilder:
-1. **YouTube-URL** -- lim inn en YouTube-lenke (fungerer pa alle enheter)
-2. **Last opp video** -- last opp en videofil til lagring, som spilles av med den eksisterende 360-spilleren (Three.js)
+Pa vanlige enheter (PC, mobil) fungerer alt som for med mus/touch-styring.
 
-Pa kurssiden vil riktig spiller vises basert pa videotypen.
+## Hva som endres
 
-## Endringer
+### 1. Installere `@react-three/xr`
+Pakken er kompatibel med prosjektets eksisterende React 18 og @react-three/fiber v8.
 
-### 1. Database: Ny kolonne `video_type`
-Legge til en ny kolonne `video_type` (text, default `'youtube'`) i `course_modules`-tabellen for a skille mellom de to typene. Eksisterende moduler far automatisk `'youtube'` som standard.
+### 2. Oppdatere `Video360Player.tsx`
+- Importere `createXRStore` og `XR` fra `@react-three/xr`
+- Opprette en XR store med `createXRStore()`
+- Wrappe 360-sfaeren i en `<XR store={store}>` komponent inne i Canvas
+- Legge til en "Enter VR"-knapp i kontrollpanelet som kaller `store.enterVR()`
+- Knappen vises kun nar WebXR er tilgjengelig pa enheten (sjekkes via `navigator.xr?.isSessionSupported('immersive-vr')`)
+- Nar brukeren er i VR-modus, skjules OrbitControls (hodestyring tar over)
 
-### 2. AdminModuleEdit.tsx -- Videotype-velger
-- Legge til radioknapper/toggle for a velge mellom "YouTube" og "Last opp video"
-- Nar "YouTube" er valgt: vis URL-input (som na)
-- Nar "Last opp video" er valgt: vis filopplasting med progress, som laster opp til `course-videos`-bucketen
-- Lagre `video_type` sammen med `video_url` i databasen
-
-### 3. CourseDetail.tsx -- Betinget spiller
-- Importere bade `YouTube360Player` og `Video360Player`
-- Sjekke `video_type`-feltet pa modulen:
-  - Hvis `'youtube'` -> vis YouTube-embed
-  - Hvis `'upload'` -> vis Three.js 360-spilleren
-- Oppdatere Module-interfacet med `video_type`
-
-### 4. Oppdatere Module-interface
-Legge til `video_type` i Module-typen i CourseDetail.tsx.
+### 3. Brukeropplevelse
+- Pa VR-briller: En VR-ikon-knapp vises i kontrollpanelet. Trykk starter immersiv VR-modus med hodestyring.
+- Pa vanlige enheter: Ingen synlig endring -- VR-knappen vises ikke hvis enheten ikke stotter WebXR.
 
 ---
 
 ## Tekniske detaljer
 
-**Ny kolonne:**
-```sql
-ALTER TABLE course_modules 
-ADD COLUMN video_type text NOT NULL DEFAULT 'youtube';
+**Ny avhengighet:** `@react-three/xr@latest` (v6.x, kompatibel med fiber >=8, react >=18)
+
+**Endringer i `Video360Player.tsx`:**
+
+```
+// Nye imports
+import { XR, createXRStore } from "@react-three/xr";
+
+// Opprette store utenfor komponenten
+const xrStore = createXRStore();
+
+// Ny state for VR-stotte
+const [vrSupported, setVrSupported] = useState(false);
+
+// Sjekk ved mount
+useEffect(() => {
+  navigator.xr?.isSessionSupported('immersive-vr')
+    .then(supported => setVrSupported(supported));
+}, []);
+
+// Canvas-innhold wrappes i <XR>
+<Canvas>
+  <XR store={xrStore}>
+    <Video360Sphere ... />
+    <OrbitControls ... />  // Fungerer fortsatt for ikke-VR
+  </XR>
+</Canvas>
+
+// Ny knapp i kontrollpanelet (kun synlig nar VR er stottet)
+{vrSupported && (
+  <Button onClick={() => xrStore.enterVR()}>
+    <Glasses icon />
+  </Button>
+)}
 ```
 
-**AdminModuleEdit.tsx:**
-- Ny state `videoType` ('youtube' | 'upload') som styrer hvilket felt som vises
-- Gjeninnfore `handleVideoUpload` for filopplasting til `course-videos`-bucketen
-- Sende `video_type` med i `formData` ved lagring
-
-**CourseDetail.tsx:**
-- Betinget rendering: `module.video_type === 'upload'` bruker `Video360Player`, ellers `YouTube360Player`
-
+**Filer som endres:**
+- `src/components/Video360Player.tsx` -- legge til XR-wrapping og VR-knapp
+- `package.json` -- ny avhengighet `@react-three/xr`
