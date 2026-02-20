@@ -23,6 +23,21 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
   useEffect(() => {
     if (!aframeLoaded || !containerRef.current) return;
 
+    const AFRAME = (window as any).AFRAME;
+
+    // Register a component that forces video texture update every frame
+    // This fixes Samsung Internet where textures don't auto-update
+    if (!AFRAME.components["force-texture-update"]) {
+      AFRAME.registerComponent("force-texture-update", {
+        tick: function () {
+          const mesh = this.el.getObject3D("mesh");
+          if (mesh && mesh.material && mesh.material.map) {
+            mesh.material.map.needsUpdate = true;
+          }
+        },
+      });
+    }
+
     const container = containerRef.current;
 
     // Clear previous scene
@@ -33,10 +48,12 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
     scene.setAttribute("embedded", "");
     scene.setAttribute("vr-mode-ui", "enabled: true");
     scene.setAttribute("loading-screen", "enabled: false");
+    scene.setAttribute("renderer", "colorManagement: false; antialias: true");
 
     const assets = document.createElement("a-assets");
     const video = document.createElement("video");
     video.id = "vid360";
+    video.crossOrigin = "anonymous";
     video.src = videoUrl;
     video.setAttribute("autoplay", "");
     video.setAttribute("muted", "");
@@ -48,7 +65,11 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
     video.preload = "auto";
 
     video.addEventListener("loadeddata", () => {
-      console.log("360 video loaded successfully");
+      console.log("360 video loaded successfully, dimensions:", video.videoWidth, "x", video.videoHeight);
+    });
+
+    video.addEventListener("error", (e) => {
+      console.error("360 video error:", video.error);
     });
 
     assets.appendChild(video);
@@ -57,6 +78,8 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
     const videosphere = document.createElement("a-videosphere");
     videosphere.setAttribute("src", "#vid360");
     videosphere.setAttribute("rotation", "0 -90 0");
+    // Force texture update each frame for Samsung Internet compatibility
+    videosphere.setAttribute("force-texture-update", "");
     scene.appendChild(videosphere);
 
     // Camera with look controls for drag/touch interaction
@@ -69,12 +92,17 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
 
     // Start video when scene is loaded (muted autoplay is allowed)
     scene.addEventListener("loaded", () => {
-      video.play().catch((e) => console.warn("Autoplay failed:", e));
+      // Small delay to ensure WebGL context is fully ready
+      setTimeout(() => {
+        video.play().catch((e) => console.warn("Autoplay failed:", e));
+      }, 100);
     });
 
     // Click/tap to unmute only
     const handleInteraction = () => {
       video.muted = false;
+      // Also try to play again in case autoplay was blocked
+      video.play().catch(() => {});
     };
     scene.addEventListener("click", handleInteraction, { once: true });
 
