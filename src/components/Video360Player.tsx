@@ -1,5 +1,5 @@
 import { useRef, useState, useEffect, useCallback, useMemo } from "react";
-import { Canvas } from "@react-three/fiber";
+import { Canvas, useFrame } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
 import { XR, createXRStore } from "@react-three/xr";
 import * as THREE from "three";
@@ -24,12 +24,18 @@ interface Video360SphereProps {
 }
 
 function Video360Sphere({ videoElement }: Video360SphereProps) {
-  // Create texture exactly like the official Three.js example:
-  // `new THREE.MeshBasicMaterial( { map: texture } )` — passed at construction time
+  const materialRef = useRef<THREE.MeshBasicMaterial>(null);
+
+  // Create texture exactly like the official Three.js example
   const texture = useMemo(() => {
     if (!videoElement) return null;
     const tex = new THREE.VideoTexture(videoElement);
     tex.colorSpace = THREE.SRGBColorSpace;
+    // Explicit settings for mobile browser compatibility (Samsung Internet)
+    tex.generateMipmaps = false;
+    tex.minFilter = THREE.LinearFilter;
+    tex.magFilter = THREE.LinearFilter;
+    tex.format = THREE.RGBAFormat;
     return tex;
   }, [videoElement]);
 
@@ -37,6 +43,13 @@ function Video360Sphere({ videoElement }: Video360SphereProps) {
   useEffect(() => {
     return () => { texture?.dispose(); };
   }, [texture]);
+
+  // Force texture update every frame — Samsung Internet doesn't auto-update VideoTexture
+  useFrame(() => {
+    if (texture && videoElement && videoElement.readyState >= videoElement.HAVE_CURRENT_DATA) {
+      texture.needsUpdate = true;
+    }
+  });
 
   // Geometry: invert on x-axis so faces point inward (official example)
   const geometry = useMemo(() => {
@@ -47,10 +60,9 @@ function Video360Sphere({ videoElement }: Video360SphereProps) {
 
   if (!texture) return null;
 
-  // Match official example: material created WITH map, not set imperatively
   return (
     <mesh geometry={geometry}>
-      <meshBasicMaterial map={texture} />
+      <meshBasicMaterial ref={materialRef} map={texture} side={THREE.FrontSide} />
     </mesh>
   );
 }
