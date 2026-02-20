@@ -4,20 +4,74 @@ interface Video360PlayerProps {
   videoUrl: string;
 }
 
+interface DebugInfo {
+  state: string;
+  time: number;
+  dimensions: string;
+  muted: boolean;
+  readyState: number;
+  networkState: number;
+  textureStatus: string;
+  sceneLoaded: boolean;
+  browser: string;
+}
+
 export function Video360Player({ videoUrl }: Video360PlayerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const videosphereRef = useRef<any>(null);
+  const sceneRef = useRef<any>(null);
   const [aframeLoaded, setAframeLoaded] = useState(false);
+  const [debugInfo, setDebugInfo] = useState<DebugInfo>({
+    state: "init",
+    time: 0,
+    dimensions: "0x0",
+    muted: true,
+    readyState: 0,
+    networkState: 0,
+    textureStatus: "n/a",
+    sceneLoaded: false,
+    browser: "",
+  });
 
-  // Load A-Frame dynamically (it registers global custom elements)
+  useEffect(() => {
+    setDebugInfo((d) => ({ ...d, browser: navigator.userAgent.slice(0, 80) }));
+  }, []);
+
+  // Load A-Frame dynamically
   useEffect(() => {
     if ((window as any).AFRAME) {
       setAframeLoaded(true);
       return;
     }
+    import("aframe").then(() => setAframeLoaded(true));
+  }, []);
 
-    import("aframe").then(() => {
-      setAframeLoaded(true);
-    });
+  // Debug interval
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const video = videoRef.current;
+      const sphere = videosphereRef.current;
+      const scene = sceneRef.current;
+
+      if (video) {
+        const mesh = sphere?.getObject3D?.("mesh");
+        const hasMap = !!(mesh?.material?.map);
+
+        setDebugInfo((d) => ({
+          ...d,
+          time: video.currentTime,
+          dimensions: `${video.videoWidth}x${video.videoHeight}`,
+          muted: video.muted,
+          readyState: video.readyState,
+          networkState: video.networkState,
+          textureStatus: mesh ? (hasMap ? "OK" : "no map") : "no mesh",
+          sceneLoaded: !!(scene as any)?.hasLoaded,
+        }));
+      }
+    }, 1000);
+
+    return () => clearInterval(interval);
   }, []);
 
   useEffect(() => {
@@ -25,8 +79,6 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
 
     const AFRAME = (window as any).AFRAME;
 
-    // Register a component that forces video texture update every frame
-    // This fixes Samsung Internet where textures don't auto-update
     if (!AFRAME.components["force-texture-update"]) {
       AFRAME.registerComponent("force-texture-update", {
         tick: function () {
@@ -39,16 +91,14 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
     }
 
     const container = containerRef.current;
-
-    // Clear previous scene
     container.innerHTML = "";
 
-    // Build a-scene with videosphere
     const scene = document.createElement("a-scene");
     scene.setAttribute("embedded", "");
     scene.setAttribute("vr-mode-ui", "enabled: true");
     scene.setAttribute("loading-screen", "enabled: false");
     scene.setAttribute("renderer", "colorManagement: false; antialias: true");
+    sceneRef.current = scene;
 
     const assets = document.createElement("a-assets");
     const video = document.createElement("video");
@@ -63,12 +113,17 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
     video.setAttribute("crossorigin", "anonymous");
     video.muted = true;
     video.preload = "auto";
+    videoRef.current = video;
 
-    video.addEventListener("loadeddata", () => {
-      console.log("360 video loaded successfully, dimensions:", video.videoWidth, "x", video.videoHeight);
-    });
-
+    // State event listeners for debug
+    const updateState = (s: string) => () => setDebugInfo((d) => ({ ...d, state: s }));
+    video.addEventListener("playing", updateState("playing"));
+    video.addEventListener("pause", updateState("paused"));
+    video.addEventListener("waiting", updateState("waiting"));
+    video.addEventListener("stalled", updateState("stalled"));
+    video.addEventListener("loadeddata", updateState("loadeddata"));
     video.addEventListener("error", (e) => {
+      setDebugInfo((d) => ({ ...d, state: `error: ${video.error?.code}` }));
       console.error("360 video error:", video.error);
     });
 
@@ -78,11 +133,10 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
     const videosphere = document.createElement("a-videosphere");
     videosphere.setAttribute("src", "#vid360");
     videosphere.setAttribute("rotation", "0 -90 0");
-    // Force texture update each frame for Samsung Internet compatibility
     videosphere.setAttribute("force-texture-update", "");
     scene.appendChild(videosphere);
+    videosphereRef.current = videosphere;
 
-    // Camera with look controls for drag/touch interaction
     const camera = document.createElement("a-camera");
     camera.setAttribute("look-controls", "reverseMouseDrag: true");
     camera.setAttribute("wasd-controls", "enabled: false");
@@ -90,25 +144,24 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
 
     container.appendChild(scene);
 
-    // Start video when scene is loaded (muted autoplay is allowed)
     scene.addEventListener("loaded", () => {
-      // Small delay to ensure WebGL context is fully ready
+      setDebugInfo((d) => ({ ...d, sceneLoaded: true }));
       setTimeout(() => {
         video.play().catch((e) => console.warn("Autoplay failed:", e));
       }, 100);
     });
 
-    // Click/tap to unmute only
     const handleInteraction = () => {
       video.muted = false;
-      // Also try to play again in case autoplay was blocked
       video.play().catch(() => {});
     };
     scene.addEventListener("click", handleInteraction, { once: true });
 
     return () => {
+      videoRef.current = null;
+      videosphereRef.current = null;
+      sceneRef.current = null;
       scene.removeEventListener("click", handleInteraction);
-      // Dispose a-scene
       if (scene.parentNode) {
         const sceneEl = scene as any;
         if (sceneEl.destroy) sceneEl.destroy();
@@ -122,6 +175,35 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
       ref={containerRef}
       className="w-full rounded-lg overflow-hidden"
       style={{ height: "400px", position: "relative" }}
-    />
+    >
+      {/* Debug overlay */}
+      <div
+        style={{
+          position: "absolute",
+          top: 8,
+          left: 8,
+          zIndex: 9999,
+          background: "rgba(0,0,0,0.75)",
+          color: "#0f0",
+          fontFamily: "monospace",
+          fontSize: "11px",
+          padding: "8px 10px",
+          borderRadius: "6px",
+          lineHeight: 1.5,
+          pointerEvents: "none",
+          maxWidth: "90%",
+          wordBreak: "break-all",
+        }}
+      >
+        <div><b>State:</b> {debugInfo.state}</div>
+        <div><b>Time:</b> {debugInfo.time.toFixed(1)}s</div>
+        <div><b>Dim:</b> {debugInfo.dimensions}</div>
+        <div><b>Muted:</b> {debugInfo.muted ? "yes" : "no"}</div>
+        <div><b>Ready:</b> {debugInfo.readyState} | <b>Net:</b> {debugInfo.networkState}</div>
+        <div><b>Texture:</b> {debugInfo.textureStatus}</div>
+        <div><b>Scene:</b> {debugInfo.sceneLoaded ? "loaded" : "not loaded"}</div>
+        <div><b>UA:</b> {debugInfo.browser}</div>
+      </div>
+    </div>
   );
 }
