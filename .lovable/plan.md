@@ -1,68 +1,112 @@
 
-# Legg til WebXR/VR-stotte i 360-videospilleren
 
-## Hva dette gir
-Brukere med VR-briller (som PICO 4, Meta Quest) vil kunne trykke "Enter VR" og oppleve 360-videoen med hodestyring -- de ser seg rundt naturlig ved aa bevege hodet, i stedet for aa dra med fingeren.
+# Bytt 360-videospiller til Video.js + videojs-vr
 
-Pa vanlige enheter (PC, mobil) fungerer alt som for med mus/touch-styring.
+## Hvorfor dette er en god ide
+Den navaerende Three.js-spilleren (via React Three Fiber) har vedvarende problemer med svart skjerm i Samsung Internet. `videojs-vr` er et offisielt Video.js-plugin som haandterer 360-video paa tvers av nettlesere -- inkludert Samsung Internet, Chrome, Safari og Firefox. Den bruker Three.js internt, men tar seg av alle kompatibilitetsproblemene automatisk.
 
 ## Hva som endres
 
-### 1. Installere `@react-three/xr`
-Pakken er kompatibel med prosjektets eksisterende React 18 og @react-three/fiber v8.
+### 1. Nye avhengigheter
+- `video.js` -- den mest brukte HTML5-videospilleren
+- `videojs-vr` -- offisielt 360/VR-plugin med WebXR-stoette
 
-### 2. Oppdatere `Video360Player.tsx`
-- Importere `createXRStore` og `XR` fra `@react-three/xr`
-- Opprette en XR store med `createXRStore()`
-- Wrappe 360-sfaeren i en `<XR store={store}>` komponent inne i Canvas
-- Legge til en "Enter VR"-knapp i kontrollpanelet som kaller `store.enterVR()`
-- Knappen vises kun nar WebXR er tilgjengelig pa enheten (sjekkes via `navigator.xr?.isSessionSupported('immersive-vr')`)
-- Nar brukeren er i VR-modus, skjules OrbitControls (hodestyring tar over)
+### 2. Fjerne unnoedvendige avhengigheter
+Disse kan fjernes da de kun ble brukt av den gamle 360-spilleren:
+- `@react-three/fiber`
+- `@react-three/drei`
+- `@react-three/xr`
+- `three`
 
-### 3. Brukeropplevelse
-- Pa VR-briller: En VR-ikon-knapp vises i kontrollpanelet. Trykk starter immersiv VR-modus med hodestyring.
-- Pa vanlige enheter: Ingen synlig endring -- VR-knappen vises ikke hvis enheten ikke stotter WebXR.
+### 3. Ny `Video360Player.tsx`
+Erstatte hele komponenten med en Video.js-basert spiller:
+- Opprette et standard `<video>` element
+- Initialisere Video.js med `videojs-vr` plugin
+- Konfigurere `projection: 'equirectangular'` for 360-video
+- WebXR/VR-stoette kommer innebygd i pluginen
+- Beholde fullskjerm-knapp og muted/unmute-funksjonalitet
+- Beholde fallback-logikk for enheter uten WebGL
+
+### 4. Ingen endring i YouTube-spilleren
+`YouTube360Player.tsx` forblir uendret -- den bruker iframe og er helt uavhengig.
+
+### 5. Ingen endring i `CourseDetail.tsx`
+Samme komponent-grensesnitt (`videoUrl` prop) saa kurssiden trenger ingen endring.
+
+## Brukeropplevelse
+- Paa desktop: Dra for aa se rundt, scroll for zoom, fullskjerm
+- Paa mobil (inkl. Samsung Internet): Touch for aa dra, pinch-zoom, fullskjerm
+- Paa VR-briller: Innebygd WebXR-stoette via videojs-vr
 
 ---
 
 ## Tekniske detaljer
 
-**Ny avhengighet:** `@react-three/xr@latest` (v6.x, kompatibel med fiber >=8, react >=18)
-
-**Endringer i `Video360Player.tsx`:**
-
+**Nye avhengigheter:**
 ```
-// Nye imports
-import { XR, createXRStore } from "@react-three/xr";
+video.js (videospiller-rammeverk)
+videojs-vr (360/VR-plugin)
+```
 
-// Opprette store utenfor komponenten
-const xrStore = createXRStore();
+**Fjernes:**
+```
+@react-three/fiber
+@react-three/drei
+@react-three/xr
+three
+```
 
-// Ny state for VR-stotte
-const [vrSupported, setVrSupported] = useState(false);
+**Ny implementasjon i `Video360Player.tsx`:**
 
-// Sjekk ved mount
-useEffect(() => {
-  navigator.xr?.isSessionSupported('immersive-vr')
-    .then(supported => setVrSupported(supported));
-}, []);
+```tsx
+import { useRef, useEffect, useState, useCallback } from "react";
+import videojs from "video.js";
+import "video.js/dist/video-js.css";
+import "videojs-vr/dist/videojs-vr.css";
+import "videojs-vr";
 
-// Canvas-innhold wrappes i <XR>
-<Canvas>
-  <XR store={xrStore}>
-    <Video360Sphere ... />
-    <OrbitControls ... />  // Fungerer fortsatt for ikke-VR
-  </XR>
-</Canvas>
+export function Video360Player({ videoUrl }: { videoUrl: string }) {
+  const videoRef = useRef<HTMLDivElement>(null);
+  const playerRef = useRef<any>(null);
 
-// Ny knapp i kontrollpanelet (kun synlig nar VR er stottet)
-{vrSupported && (
-  <Button onClick={() => xrStore.enterVR()}>
-    <Glasses icon />
-  </Button>
-)}
+  useEffect(() => {
+    const videoElement = document.createElement("video-js");
+    videoElement.classList.add("vjs-big-play-centered", "vjs-fluid");
+    videoRef.current?.appendChild(videoElement);
+
+    const player = videojs(videoElement, {
+      controls: true,
+      autoplay: false,
+      preload: "auto",
+      loop: true,
+      muted: true,
+      sources: [{ src: videoUrl, type: "video/mp4" }],
+    });
+
+    player.vr({ projection: "equirectangular" });
+    playerRef.current = player;
+
+    return () => {
+      if (playerRef.current) {
+        playerRef.current.dispose();
+        playerRef.current = null;
+      }
+    };
+  }, [videoUrl]);
+
+  return (
+    <div className="w-full rounded-lg overflow-hidden">
+      <div ref={videoRef} />
+    </div>
+  );
+}
 ```
 
 **Filer som endres:**
-- `src/components/Video360Player.tsx` -- legge til XR-wrapping og VR-knapp
-- `package.json` -- ny avhengighet `@react-three/xr`
+- `src/components/Video360Player.tsx` -- fullstendig omskrevet med Video.js
+- `package.json` -- nye avhengigheter, fjerne gamle
+
+**Filer som IKKE endres:**
+- `src/components/YouTube360Player.tsx`
+- `src/pages/CourseDetail.tsx`
+
