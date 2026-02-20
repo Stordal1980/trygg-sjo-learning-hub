@@ -7,6 +7,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Anchor, ArrowLeft, Play, CheckCircle2, Lock } from "lucide-react";
 import type { User } from "@supabase/supabase-js";
 import { YouTube360Player } from "@/components/YouTube360Player";
+import { Video360Player } from "@/components/Video360Player";
 import { useEnrollmentCheck } from "@/hooks/useEnrollmentCheck";
 
 interface Course {
@@ -22,6 +23,7 @@ interface Module {
   description: string | null;
   content: string | null;
   video_url: string | null;
+  video_type: string | null;
   order_index: number;
 }
 
@@ -239,7 +241,11 @@ const CourseDetail = () => {
                   </CardHeader>
                   <CardContent className="space-y-4">
                     {module.video_url ? (
-                      <YouTube360Player videoUrl={module.video_url} />
+                      module.video_type === "upload" ? (
+                        <Video360Player videoUrl={module.video_url} />
+                      ) : (
+                        <YouTube360Player videoUrl={module.video_url} />
+                      )
                     ) : (
                       <div className="bg-muted rounded-lg p-8 text-center">
                         <Play className="h-12 w-12 text-muted-foreground mx-auto mb-4" aria-hidden="true" />
