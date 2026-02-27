@@ -253,17 +253,14 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
           video.muted = true;
           await video.play();
           setIsPlaying(true);
-          setDebugInfo((d) => ({ ...d, state: "playing muted (tap again for sound)" }));
+          // Auto-unmute after playback starts
+          setTimeout(() => { if (videoRef.current) videoRef.current.muted = false; }, 300);
+          setDebugInfo((d) => ({ ...d, state: "playing" }));
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
           setDebugInfo((d) => ({ ...d, state: `play-error: ${message}` }));
         }
         return;
-      }
-
-      if (video.muted) {
-        video.muted = false;
-        setDebugInfo((d) => ({ ...d, state: "playing with sound" }));
       }
     };
 
@@ -295,7 +292,8 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
         video.muted = true;
         await video.play();
         setIsPlaying(true);
-        setDebugInfo((d) => ({ ...d, state: "playing muted (tap again for sound)" }));
+        setTimeout(() => { if (videoRef.current) videoRef.current.muted = false; }, 300);
+        setDebugInfo((d) => ({ ...d, state: "playing" }));
         return;
       }
 
@@ -308,7 +306,8 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
         video.muted = true;
         await video.play();
         setIsPlaying(true);
-        setDebugInfo((d) => ({ ...d, state: "playing muted (tap again for sound)" }));
+        setDebugInfo((d) => ({ ...d, state: "playing" }));
+        setTimeout(() => { if (videoRef.current) videoRef.current.muted = false; }, 300);
       } catch (fallbackErr) {
         const message = fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr);
         console.error("Play failed:", fallbackErr);
