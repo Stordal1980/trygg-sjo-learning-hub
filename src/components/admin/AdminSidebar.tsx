@@ -1,5 +1,6 @@
-import { LayoutDashboard, BookOpen, Settings, DollarSign, Ticket } from "lucide-react";
+import { LayoutDashboard, BookOpen, Settings, DollarSign, Ticket, ArrowLeft } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
+import { useNavigate } from "react-router-dom";
 import {
   Sidebar,
   SidebarContent,
@@ -22,7 +23,7 @@ const menuItems = [
 
 export function AdminSidebar() {
   const { state } = useSidebar();
-
+  const navigate = useNavigate();
   return (
     <Sidebar className={state === "collapsed" ? "w-14" : "w-60"} collapsible="icon">
       <SidebarContent>
@@ -45,6 +46,18 @@ export function AdminSidebar() {
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+        <SidebarGroup className="mt-auto">
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton onClick={() => navigate("/dashboard")} className="hover:bg-muted/50">
+                  <ArrowLeft className="mr-2 h-4 w-4" />
+                  {state !== "collapsed" && <span>Tilbake til kurs</span>}
+                </SidebarMenuButton>
+              </SidebarMenuItem>
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
