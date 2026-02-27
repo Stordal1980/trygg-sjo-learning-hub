@@ -123,9 +123,14 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
           const gl = renderer.getContext();
           const maxTex = gl.getParameter(gl.MAX_TEXTURE_SIZE);
 
-          // Only use canvas workaround if video exceeds max texture size
-          if (vw <= maxTex && vh <= maxTex) {
-            // Just do needsUpdate for normal-sized videos
+          // Old device detection: cap at 1920 for GPUs with MAX_TEXTURE_SIZE <= 4096
+          const isOldDevice = maxTex <= 4096;
+          const oldDeviceCap = isOldDevice ? 1920 : Infinity;
+
+          // Only use canvas workaround if video exceeds limits
+          const needsDownscale = vw > maxTex || vh > maxTex || (isOldDevice && (vw > oldDeviceCap || vh > oldDeviceCap));
+          if (!needsDownscale) {
+            // Just do needsUpdate for normal-sized videos on modern devices
             const mesh = this.el.getObject3D("mesh");
             if (mesh?.material?.map) {
               mesh.material.map.needsUpdate = true;
@@ -133,8 +138,8 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
             return;
           }
 
-          // Scale down to fit within maxSize
-          const maxSize = Math.min(this.data.maxSize, maxTex);
+          // Scale down to fit within the most restrictive limit
+          const maxSize = Math.min(this.data.maxSize, maxTex, oldDeviceCap);
           const aspect = vw / vh;
           let cw, ch;
           if (vw >= vh) {
