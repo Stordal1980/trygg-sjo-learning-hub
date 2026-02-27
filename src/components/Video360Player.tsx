@@ -198,11 +198,14 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
     videoRef.current = video;
 
     // State event listeners for debug
-    const updateState = (s: string) => () => setDebugInfo((d) => ({ ...d, state: s }));
-    video.addEventListener("playing", updateState("playing"));
-    video.addEventListener("pause", updateState("paused"));
-    video.addEventListener("waiting", updateState("waiting"));
-    video.addEventListener("stalled", updateState("stalled"));
+    const updateState = (s: string, playing?: boolean) => () => {
+      setDebugInfo((d) => ({ ...d, state: s }));
+      if (typeof playing === "boolean") setIsPlaying(playing);
+    };
+    video.addEventListener("playing", updateState("playing", true));
+    video.addEventListener("pause", updateState("paused", false));
+    video.addEventListener("waiting", updateState("waiting", false));
+    video.addEventListener("stalled", updateState("stalled", false));
     video.addEventListener("loadeddata", updateState("loadeddata"));
     video.addEventListener("error", () => {
       setDebugInfo((d) => ({ ...d, state: `error: ${video.error?.code}` }));
@@ -231,7 +234,24 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
       setDebugInfo((d) => ({ ...d, sceneLoaded: true }));
     });
 
+    const handleSceneInteraction = () => {
+      if (video.paused) {
+        video.play().then(() => {
+          setIsPlaying(true);
+          setDebugInfo((d) => ({ ...d, state: "playing (scene tap)" }));
+        }).catch((err) => {
+          const message = err instanceof Error ? err.message : String(err);
+          setDebugInfo((d) => ({ ...d, state: `play-error: ${message}` }));
+        });
+      }
+    };
+
+    scene.addEventListener("pointerdown", handleSceneInteraction);
+    scene.addEventListener("click", handleSceneInteraction);
+
     return () => {
+      scene.removeEventListener("pointerdown", handleSceneInteraction);
+      scene.removeEventListener("click", handleSceneInteraction);
       videoRef.current = null;
       videosphereRef.current = null;
       sceneRef.current = null;
@@ -243,23 +263,27 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
     };
   }, [aframeLoaded, videoUrl]);
 
-  const handlePlayClick = () => {
+  const handlePlayClick = async () => {
     const video = videoRef.current;
     if (!video) return;
-    // Direct user gesture -> play
-    video.play().then(() => {
+
+    try {
+      video.muted = false;
+      await video.play();
       setIsPlaying(true);
       setDebugInfo((d) => ({ ...d, state: "playing (user gesture)" }));
-      // Unmute after a short delay to keep gesture context
-      setTimeout(() => {
-        if (videoRef.current) {
-          videoRef.current.muted = false;
-        }
-      }, 100);
-    }).catch((err) => {
-      console.error("Play failed:", err);
-      setDebugInfo((d) => ({ ...d, state: `play-error: ${err.message}` }));
-    });
+    } catch (err) {
+      try {
+        video.muted = true;
+        await video.play();
+        setIsPlaying(true);
+        setDebugInfo((d) => ({ ...d, state: "playing muted (tap igjen for lyd)" }));
+      } catch (fallbackErr) {
+        const message = fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr);
+        console.error("Play failed:", fallbackErr);
+        setDebugInfo((d) => ({ ...d, state: `play-error: ${message}` }));
+      }
+    }
   };
 
   return (
