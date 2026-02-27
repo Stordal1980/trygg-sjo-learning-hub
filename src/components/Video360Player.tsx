@@ -25,6 +25,7 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
   const sceneRef = useRef<any>(null);
   const videoIdRef = useRef(`vid360-${Math.random().toString(36).slice(2, 9)}`);
   const [aframeLoaded, setAframeLoaded] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
   const [debugInfo, setDebugInfo] = useState<DebugInfo>({
     state: "init",
     time: 0,
@@ -187,14 +188,13 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
     video.id = videoIdRef.current;
     video.crossOrigin = "anonymous";
     video.src = videoUrl;
-    // No autoplay - controlled by play button
-    video.setAttribute("playsinline", "");
     video.setAttribute("playsinline", "");
     video.setAttribute("webkit-playsinline", "");
     video.setAttribute("loop", "true");
     video.setAttribute("crossorigin", "anonymous");
     video.muted = true;
     video.preload = "auto";
+    video.autoplay = false;
     videoRef.current = video;
 
     // State event listeners for debug
@@ -229,20 +229,12 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
 
     scene.addEventListener("loaded", () => {
       setDebugInfo((d) => ({ ...d, sceneLoaded: true }));
-      // Don't autoplay - wait for user to click play button
     });
-
-    const handleInteraction = () => {
-      video.muted = false;
-      video.play().catch(() => {});
-    };
-    scene.addEventListener("click", handleInteraction, { once: true });
 
     return () => {
       videoRef.current = null;
       videosphereRef.current = null;
       sceneRef.current = null;
-      scene.removeEventListener("click", handleInteraction);
       if (scene.parentNode) {
         const sceneEl = scene as any;
         if (sceneEl.destroy) sceneEl.destroy();
@@ -250,6 +242,25 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
       }
     };
   }, [aframeLoaded, videoUrl]);
+
+  const handlePlayClick = () => {
+    const video = videoRef.current;
+    if (!video) return;
+    // Direct user gesture -> play
+    video.play().then(() => {
+      setIsPlaying(true);
+      setDebugInfo((d) => ({ ...d, state: "playing (user gesture)" }));
+      // Unmute after a short delay to keep gesture context
+      setTimeout(() => {
+        if (videoRef.current) {
+          videoRef.current.muted = false;
+        }
+      }, 100);
+    }).catch((err) => {
+      console.error("Play failed:", err);
+      setDebugInfo((d) => ({ ...d, state: `play-error: ${err.message}` }));
+    });
+  };
 
   return (
     <div>
@@ -272,11 +283,38 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
         <div><b>MaxTexSize:</b> {debugInfo.maxTexSize} | <b>TexFit:</b> {debugInfo.texSizeOk}</div>
         <div style={{ fontSize: "10px", opacity: 0.7 }}><b>UA:</b> {debugInfo.browser}</div>
       </div>
-      <div
-        ref={containerRef}
-        className="w-full rounded-lg overflow-hidden"
-        style={{ height: "400px" }}
-      />
+      <div style={{ position: "relative" }}>
+        <div
+          ref={containerRef}
+          className="w-full rounded-lg overflow-hidden"
+          style={{ height: "400px" }}
+        />
+        {!isPlaying && (
+          <button
+            onClick={handlePlayClick}
+            style={{
+              position: "absolute",
+              top: "50%",
+              left: "50%",
+              transform: "translate(-50%, -50%)",
+              zIndex: 10,
+              background: "rgba(0,0,0,0.7)",
+              border: "3px solid white",
+              borderRadius: "50%",
+              width: "80px",
+              height: "80px",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <svg width="36" height="36" viewBox="0 0 24 24" fill="white">
+              <polygon points="5,3 19,12 5,21" />
+            </svg>
+          </button>
+        )}
+      </div>
     </div>
   );
 }
