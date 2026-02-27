@@ -23,6 +23,7 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const videosphereRef = useRef<any>(null);
   const sceneRef = useRef<any>(null);
+  const videoIdRef = useRef(`vid360-${Math.random().toString(36).slice(2, 9)}`);
   const [aframeLoaded, setAframeLoaded] = useState(false);
   const [debugInfo, setDebugInfo] = useState<DebugInfo>({
     state: "init",
@@ -181,7 +182,7 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
 
     const assets = document.createElement("a-assets");
     const video = document.createElement("video");
-    video.id = "vid360";
+    video.id = videoIdRef.current;
     video.crossOrigin = "anonymous";
     video.src = videoUrl;
     // No autoplay - controlled by play button
@@ -210,7 +211,7 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
     scene.appendChild(assets);
 
     const videosphere = document.createElement("a-videosphere");
-    videosphere.setAttribute("src", "#vid360");
+    videosphere.setAttribute("src", `#${videoIdRef.current}`);
     videosphere.setAttribute("rotation", "0 -90 0");
     // Use canvas-video-texture instead of force-texture-update for Samsung compatibility
     videosphere.setAttribute("canvas-video-texture", "maxSize: 4096");
