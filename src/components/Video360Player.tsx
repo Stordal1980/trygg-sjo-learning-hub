@@ -198,7 +198,10 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
     video.setAttribute("loop", "true");
     video.setAttribute("crossorigin", "anonymous");
     video.muted = true;
+    video.setAttribute("muted", "");
     video.preload = "auto";
+    video.playsInline = true;
+    (video as any).webkitPlaysInline = true;
     video.autoplay = false;
     videoRef.current = video;
 
@@ -239,24 +242,37 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
       setDebugInfo((d) => ({ ...d, sceneLoaded: true }));
     });
 
-    const handleSceneInteraction = () => {
+    let lastInteractionAt = 0;
+    const handleSceneInteraction = async () => {
+      const now = Date.now();
+      if (now - lastInteractionAt < 250) return;
+      lastInteractionAt = now;
+
       if (video.paused) {
-        video.play().then(() => {
+        try {
+          video.muted = true;
+          await video.play();
           setIsPlaying(true);
-          setDebugInfo((d) => ({ ...d, state: "playing (scene tap)" }));
-        }).catch((err) => {
+          setDebugInfo((d) => ({ ...d, state: "playing muted (tap again for sound)" }));
+        } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
           setDebugInfo((d) => ({ ...d, state: `play-error: ${message}` }));
-        });
+        }
+        return;
+      }
+
+      if (video.muted) {
+        video.muted = false;
+        setDebugInfo((d) => ({ ...d, state: "playing with sound" }));
       }
     };
 
-    scene.addEventListener("pointerdown", handleSceneInteraction);
     scene.addEventListener("click", handleSceneInteraction);
+    scene.addEventListener("touchend", handleSceneInteraction);
 
     return () => {
-      scene.removeEventListener("pointerdown", handleSceneInteraction);
       scene.removeEventListener("click", handleSceneInteraction);
+      scene.removeEventListener("touchend", handleSceneInteraction);
       videoRef.current = null;
       videosphereRef.current = null;
       sceneRef.current = null;
@@ -272,7 +288,17 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
     const video = videoRef.current;
     if (!video) return;
 
+    const isMobileDevice = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+
     try {
+      if (isMobileDevice) {
+        video.muted = true;
+        await video.play();
+        setIsPlaying(true);
+        setDebugInfo((d) => ({ ...d, state: "playing muted (tap again for sound)" }));
+        return;
+      }
+
       video.muted = false;
       await video.play();
       setIsPlaying(true);
@@ -282,7 +308,7 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
         video.muted = true;
         await video.play();
         setIsPlaying(true);
-        setDebugInfo((d) => ({ ...d, state: "playing muted (tap igjen for lyd)" }));
+        setDebugInfo((d) => ({ ...d, state: "playing muted (tap again for sound)" }));
       } catch (fallbackErr) {
         const message = fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr);
         console.error("Play failed:", fallbackErr);
@@ -320,7 +346,11 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
         />
         {!isPlaying && (
           <button
-            onClick={handlePlayClick}
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              void handlePlayClick();
+            }}
             style={{
               position: "absolute",
               top: "50%",
