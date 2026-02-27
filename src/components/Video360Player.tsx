@@ -107,7 +107,9 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
           this.textureReady = false;
         },
         tick: function () {
-          const video = this.el.sceneEl?.querySelector("video");
+          const srcAttr = this.el.getAttribute("src");
+          const videoId = srcAttr ? srcAttr.replace("#", "") : null;
+          const video = videoId ? document.getElementById(videoId) as HTMLVideoElement : null;
           if (!video || video.readyState < 2) return;
 
           const vw = video.videoWidth;
