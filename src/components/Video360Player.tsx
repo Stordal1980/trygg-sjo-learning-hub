@@ -355,7 +355,11 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
 
     const videosphere = document.createElement("a-videosphere");
     videosphere.setAttribute("src", `#${videoIdRef.current}`);
-    videosphere.setAttribute("rotation", "0 -90 0");
+    // iOS Safari applies the video's embedded rotation metadata to WebGL textures,
+    // while Chrome ignores it. This causes a 90° offset on iOS.
+    // Compensate with Z-axis rotation on iOS.
+    const iosDevice = isIOSSafari();
+    videosphere.setAttribute("rotation", iosDevice ? "0 -90 -90" : "0 -90 0");
     // Use canvas-video-texture instead of force-texture-update for Samsung compatibility
     videosphere.setAttribute("canvas-video-texture", "maxSize: 4096");
     scene.appendChild(videosphere);
