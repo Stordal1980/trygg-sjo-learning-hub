@@ -341,23 +341,17 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
       console.error("360 video error:", video.error, "networkState:", video.networkState, "src:", videoUrl);
     });
 
-    if (isIOSSafari()) {
-      // On iOS: place video OUTSIDE a-assets to avoid A-Frame's asset timeout mechanism.
-      // A-Frame's asset system expects to control loading, but iOS won't preload video
-      // without a user gesture, causing a premature timeout failure.
-      // a-videosphere finds the video by ID via document.querySelector — works fine outside a-assets.
-      container.appendChild(video);
-      video.style.display = "none";
+    // Place video OUTSIDE a-assets on all platforms.
+    // A-Frame's a-assets system tries to manage video loading with its own timeout,
+    // which blocks scene initialization (no mesh, no texture) until the video is "ready".
+    // For large 360 videos this can take 30+ seconds → black screen with audio only.
+    // a-videosphere resolves src="#id" via document.querySelector, so the video
+    // just needs to be in the DOM — not specifically inside a-assets.
+    container.appendChild(video);
+    video.style.display = "none";
 
-      const assets = document.createElement("a-assets");
-      assets.setAttribute("timeout", "30000");
-      scene.appendChild(assets);
-    } else {
-      const assets = document.createElement("a-assets");
-      assets.setAttribute("timeout", "30000");
-      assets.appendChild(video);
-      scene.appendChild(assets);
-    }
+    const assets = document.createElement("a-assets");
+    scene.appendChild(assets);
 
     const videosphere = document.createElement("a-videosphere");
     videosphere.setAttribute("src", `#${videoIdRef.current}`);
