@@ -379,17 +379,19 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
 
     container.appendChild(scene);
 
-    // Fallback: if scene doesn't report "loaded" within 5 seconds, try to manually
-    // kick-start the texture pipeline. On some iOS devices, A-Frame scene init stalls
-    // but the renderer is actually functional.
+    // Fallback: on iOS 14.x, A-Frame's scene init stalls — hasLoaded stays false,
+    // which means the render loop never starts. Even if we create a perfect mesh+texture,
+    // nothing gets drawn because A-Frame's renderer.render() is never called.
+    //
+    // Fix: after 3 seconds, if the scene hasn't loaded:
+    // 1. Ensure the videosphere has a working mesh+texture
+    // 2. Force-start A-Frame by setting hasLoaded=true and calling play()
+    //    This starts the render loop AND component ticking (look-controls, etc.)
+    // 3. If play() fails, fall back to a manual requestAnimationFrame render loop
     const sceneLoadTimeout = setTimeout(() => {
       const sceneEl = scene as any;
-      if (!sceneEl.hasLoaded) {
-        console.warn("A-Frame scene not loaded after 5s — attempting manual texture setup");
-        setDebugInfo(d => ({ ...d, state: d.state + " (scene-timeout)" }));
-      }
-      // Regardless of hasLoaded, try to ensure the videosphere has a working texture.
-      // On iOS, the videosphere mesh might exist but the material src never resolved.
+
+      // Step 1: Ensure videosphere has a working texture
       const sphere = videosphereRef.current;
       const vid = videoRef.current;
       if (sphere && vid) {
@@ -409,18 +411,16 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
             console.error("Manual texture setup failed:", e);
           }
         } else if (!mesh) {
-          // No mesh at all — scene init failed completely. Try creating geometry manually.
           console.warn("No mesh on videosphere — creating geometry manually");
           try {
             const THREE = (window as any).AFRAME.THREE;
             const geometry = new THREE.SphereGeometry(500, 60, 40);
-            geometry.scale(-1, 1, 1); // Invert for inside-out rendering
+            geometry.scale(-1, 1, 1);
             const tex = new THREE.VideoTexture(vid);
             tex.minFilter = THREE.LinearFilter;
             tex.magFilter = THREE.LinearFilter;
             const material = new THREE.MeshBasicMaterial({ map: tex });
             const sphereMesh = new THREE.Mesh(geometry, material);
-            // Apply rotation
             const iosRot = isIOSSafari();
             sphereMesh.rotation.set(0, -Math.PI / 2, iosRot ? -Math.PI / 2 : 0);
             sphere.setObject3D("mesh", sphereMesh);
@@ -431,7 +431,43 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
           }
         }
       }
-    }, 5000);
+
+      // Step 2: Force-start the render loop if scene didn't load
+      if (!sceneEl.hasLoaded) {
+        console.warn("A-Frame scene not loaded after 3s — force-starting render loop");
+        setDebugInfo(d => ({ ...d, state: d.state + " (force-start)" }));
+
+        try {
+          // Tell A-Frame the scene is loaded so play() can start the render loop
+          sceneEl.hasLoaded = true;
+          sceneEl.emit("loaded");
+
+          // play() starts the render loop AND component ticking (look-controls, canvas-video-texture)
+          if (typeof sceneEl.play === "function") {
+            sceneEl.play();
+            console.log("A-Frame scene force-started successfully");
+          }
+        } catch (e) {
+          console.error("Force-start via play() failed:", e);
+
+          // Last resort: manual render loop using A-Frame's renderer
+          if (sceneEl.renderer && sceneEl.object3D && sceneEl.camera) {
+            console.warn("Starting manual render loop");
+            let manualRafId: number;
+            const manualRender = () => {
+              if (!sceneRef.current) return;
+              manualRafId = requestAnimationFrame(manualRender);
+              try {
+                sceneEl.renderer.render(sceneEl.object3D, sceneEl.camera);
+              } catch (_) {
+                cancelAnimationFrame(manualRafId);
+              }
+            };
+            manualRender();
+          }
+        }
+      }
+    }, 3000);
 
     let lastInteractionAt = 0;
     const handleSceneInteraction = () => {
