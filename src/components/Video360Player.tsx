@@ -225,10 +225,15 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
           const isOldDevice = maxTex <= 4096;
           const oldDeviceCap = isOldDevice ? 1920 : Infinity;
 
-          // Only use canvas workaround if video exceeds limits
-          const needsDownscale = vw > maxTex || vh > maxTex || (isOldDevice && (vw > oldDeviceCap || vh > oldDeviceCap));
-          if (!needsDownscale) {
-            // Just do needsUpdate for normal-sized videos on modern devices
+          // Force canvas-based texture on ALL iOS devices.
+          // iOS Safari (especially 14.x) has unreliable THREE.VideoTexture — it gets created
+          // from a video with no data (preload="none") and never recovers on older WebKit.
+          // Drawing video frames to a 2D canvas and using CanvasTexture bypasses this entirely.
+          const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+            (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+          const needsCanvas = isIOS || vw > maxTex || vh > maxTex || (isOldDevice && (vw > oldDeviceCap || vh > oldDeviceCap));
+          if (!needsCanvas) {
+            // Desktop/Android with normal-sized video — just mark texture for update
             const mesh = this.el.getObject3D("mesh");
             if (mesh?.material?.map) {
               mesh.material.map.needsUpdate = true;
@@ -236,8 +241,9 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
             return;
           }
 
-          // Scale down to fit within the most restrictive limit
-          const maxSize = Math.min(this.data.maxSize, maxTex, oldDeviceCap);
+          // Scale down to fit within limits. On iOS, cap at 2048 for reliable performance.
+          const iosCap = isIOS ? 2048 : Infinity;
+          const maxSize = Math.min(this.data.maxSize, maxTex, oldDeviceCap, iosCap);
           const aspect = vw / vh;
           let cw, ch;
           if (vw >= vh) {
@@ -446,6 +452,19 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
           if (typeof sceneEl.play === "function") {
             sceneEl.play();
             console.log("A-Frame scene force-started successfully");
+          }
+
+          // Force renderer resize — during stalled init, the canvas may have 0×0 dimensions
+          if (typeof sceneEl.resize === "function") {
+            sceneEl.resize();
+          } else if (sceneEl.renderer && container) {
+            const w = container.clientWidth;
+            const h = container.clientHeight;
+            sceneEl.renderer.setSize(w, h);
+            if (sceneEl.camera) {
+              sceneEl.camera.aspect = w / h;
+              sceneEl.camera.updateProjectionMatrix();
+            }
           }
         } catch (e) {
           console.error("Force-start via play() failed:", e);
