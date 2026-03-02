@@ -186,17 +186,28 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
     scene.setAttribute("vr-mode-ui", "enabled: true");
     scene.setAttribute("loading-screen", "enabled: false");
     scene.setAttribute("renderer", "colorManagement: false; antialias: true");
+    // Constrain scene within container on iOS Safari
+    scene.style.position = "absolute";
+    scene.style.top = "0";
+    scene.style.left = "0";
+    scene.style.width = "100%";
+    scene.style.height = "100%";
+    scene.style.zIndex = "1";
     sceneRef.current = scene;
 
     const assets = document.createElement("a-assets");
     const video = document.createElement("video");
     video.id = videoIdRef.current;
-    video.crossOrigin = "anonymous";
     video.src = videoUrl;
     video.setAttribute("playsinline", "");
     video.setAttribute("webkit-playsinline", "");
     video.setAttribute("loop", "true");
-    video.setAttribute("crossorigin", "anonymous");
+    // Only set crossOrigin for cross-origin URLs (not for same-origin or data: URLs)
+    const isCrossOrigin = videoUrl.startsWith("http") && !videoUrl.startsWith(window.location.origin);
+    if (isCrossOrigin) {
+      video.crossOrigin = "anonymous";
+      video.setAttribute("crossorigin", "anonymous");
+    }
     video.muted = true;
     video.setAttribute("muted", "");
     video.preload = "auto";
@@ -349,7 +360,7 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
         <div
           ref={containerRef}
           className="w-full rounded-lg overflow-hidden"
-          style={{ height: "400px" }}
+          style={{ height: "400px", position: "relative" }}
         />
         {!isPlaying && (
           <button
