@@ -30,6 +30,7 @@ interface DebugInfo {
   texSizeOk: string;
   isIOS: boolean;
   retryCount: number;
+  videoSrc: string;
 }
 
 export function Video360Player({ videoUrl }: Video360PlayerProps) {
@@ -55,6 +56,7 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
     texSizeOk: "?",
     isIOS: false,
     retryCount: 0,
+    videoSrc: "",
   });
 
   useEffect(() => {
@@ -62,6 +64,7 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
       ...d,
       browser: navigator.userAgent.slice(0, 80),
       isIOS: isIOSSafari(),
+      videoSrc: videoUrl.slice(0, 60),
     }));
     // Check GPU max texture size
     try {
@@ -324,13 +327,18 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
     video.addEventListener("error", () => {
       const code = video.error?.code ?? 0;
       const noSource = video.networkState === HTMLMediaElement.NETWORK_NO_SOURCE;
-      const reason = noSource || code === 4
-        ? "Ingen st\u00f8ttet videokilde (iOS Safari krever MP4/H.264 + AAC)."
-        : `Videofeil (kode ${code}).`;
+      let reason: string;
+      if (noSource || code === 4) {
+        reason = "Videoen kan ikke spilles av p\u00e5 denne enheten. " +
+          "Videofilen bruker sannsynligvis et videoformat (codec) som ikke st\u00f8ttes. " +
+          "Be admin laste opp videoen p\u00e5 nytt i MP4-format med H.264-video og AAC-lyd.";
+      } else {
+        reason = `Videofeil (kode ${code}).`;
+      }
 
       setFatalError(reason);
-      setDebugInfo((d) => ({ ...d, state: `error: ${code}` }));
-      console.error("360 video error:", video.error);
+      setDebugInfo((d) => ({ ...d, state: `error: code=${code} net=${video.networkState}` }));
+      console.error("360 video error:", video.error, "networkState:", video.networkState, "src:", videoUrl);
     });
 
     if (isIOSSafari()) {
@@ -443,6 +451,7 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
         <div><b>Texture:</b> {debugInfo.textureStatus} | <b>Scene:</b> {debugInfo.sceneLoaded ? "loaded" : "not loaded"}</div>
         <div><b>MaxTexSize:</b> {debugInfo.maxTexSize} | <b>TexFit:</b> {debugInfo.texSizeOk}</div>
         <div><b>iOS:</b> {debugInfo.isIOS ? "yes" : "no"} | <b>Retries:</b> {debugInfo.retryCount}</div>
+        <div style={{ fontSize: "10px", opacity: 0.7 }}><b>Src:</b> {debugInfo.videoSrc}...</div>
         <div style={{ fontSize: "10px", opacity: 0.7 }}><b>UA:</b> {debugInfo.browser}</div>
       </div>
       {fatalError ? (

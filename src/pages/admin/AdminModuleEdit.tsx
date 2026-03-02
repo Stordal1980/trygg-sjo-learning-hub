@@ -68,6 +68,43 @@ export default function AdminModuleEdit() {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    // Validate video codec compatibility (especially for iOS Safari)
+    const isCompatible = await new Promise<boolean>((resolve) => {
+      const testVideo = document.createElement("video");
+      testVideo.muted = true;
+      testVideo.playsInline = true;
+      testVideo.preload = "metadata";
+
+      const cleanup = () => {
+        URL.revokeObjectURL(testVideo.src);
+        testVideo.remove();
+      };
+
+      testVideo.addEventListener("loadedmetadata", () => {
+        cleanup();
+        resolve(true);
+      }, { once: true });
+
+      testVideo.addEventListener("error", () => {
+        cleanup();
+        resolve(false);
+      }, { once: true });
+
+      // Timeout after 5s — if metadata can't load, likely incompatible
+      setTimeout(() => { cleanup(); resolve(true); }, 5000);
+
+      testVideo.src = URL.createObjectURL(file);
+    });
+
+    if (!isCompatible) {
+      toast({
+        title: "Videoformat st\u00f8ttes ikke",
+        description: "Denne videoen bruker et format som ikke fungerer p\u00e5 alle enheter (spesielt iPhone/iPad). Konverter til MP4 med H.264-video og AAC-lyd f\u00f8rst.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setUploading(true);
     setUploadProgress(0);
 
@@ -82,7 +119,10 @@ export default function AdminModuleEdit() {
 
       const { data, error } = await supabase.storage
         .from("course-videos")
-        .upload(fileName, file, { upsert: true });
+        .upload(fileName, file, {
+          upsert: true,
+          contentType: file.type || "video/mp4",
+        });
 
       clearInterval(progressInterval);
 
@@ -294,6 +334,9 @@ export default function AdminModuleEdit() {
                   )}
                   <p className="text-sm text-muted-foreground">
                     Videoen spilles av med 360°-spilleren (Three.js)
+                  </p>
+                  <p className="text-xs text-amber-600">
+                    Viktig: Bruk MP4-format med H.264-video og AAC-lyd for best kompatibilitet p{"\u00e5"} alle enheter (iPhone, Android, VR).
                   </p>
                 </div>
               )}
