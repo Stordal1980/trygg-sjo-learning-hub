@@ -283,7 +283,10 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
     scene.setAttribute("embedded", "");
     scene.setAttribute("vr-mode-ui", "enabled: true");
     scene.setAttribute("loading-screen", "enabled: false");
-    scene.setAttribute("renderer", "colorManagement: false; antialias: true");
+    // Disable antialias on mobile — it's expensive and can cause WebGL context creation
+    // to fail silently on older iPhones with limited GPU memory.
+    const mobile = isMobileDevice();
+    scene.setAttribute("renderer", `colorManagement: false; antialias: ${mobile ? "false" : "true"}`);
     // Constrain scene within container on iOS Safari
     scene.style.position = "absolute";
     scene.style.top = "0";
@@ -341,17 +344,15 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
       console.error("360 video error:", video.error, "networkState:", video.networkState, "src:", videoUrl);
     });
 
-    // Place video OUTSIDE a-assets on all platforms.
-    // A-Frame's a-assets system tries to manage video loading with its own timeout,
-    // which blocks scene initialization (no mesh, no texture) until the video is "ready".
-    // For large 360 videos this can take 30+ seconds → black screen with audio only.
-    // a-videosphere resolves src="#id" via document.querySelector, so the video
-    // just needs to be in the DOM — not specifically inside a-assets.
-    container.appendChild(video);
+    // Place video inside <a-scene> as a direct child (NOT inside <a-assets>).
+    // - Putting it inside a-assets blocks scene init until the video is "ready" (30s+ timeout)
+    // - Putting it outside the scene entirely breaks iOS because A-Frame sometimes uses
+    //   sceneEl.querySelector() to resolve src="#id" (not document.querySelector)
+    // - As a direct child of a-scene (outside a-assets), A-Frame ignores it during asset loading
+    //   but can still find it via querySelector for the src="#id" reference.
+    // NO <a-assets> element at all — even empty, it can trigger asset loading logic on iOS.
     video.style.display = "none";
-
-    const assets = document.createElement("a-assets");
-    scene.appendChild(assets);
+    scene.appendChild(video);
 
     const videosphere = document.createElement("a-videosphere");
     videosphere.setAttribute("src", `#${videoIdRef.current}`);
@@ -370,11 +371,67 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
     camera.setAttribute("wasd-controls", "enabled: false");
     scene.appendChild(camera);
 
-    container.appendChild(scene);
-
+    // Attach scene "loaded" listener BEFORE appending to DOM to avoid race condition
+    // (on some browsers, the event fires synchronously during DOM insertion)
     scene.addEventListener("loaded", () => {
       setDebugInfo((d) => ({ ...d, sceneLoaded: true }));
     });
+
+    container.appendChild(scene);
+
+    // Fallback: if scene doesn't report "loaded" within 5 seconds, try to manually
+    // kick-start the texture pipeline. On some iOS devices, A-Frame scene init stalls
+    // but the renderer is actually functional.
+    const sceneLoadTimeout = setTimeout(() => {
+      const sceneEl = scene as any;
+      if (!sceneEl.hasLoaded) {
+        console.warn("A-Frame scene not loaded after 5s — attempting manual texture setup");
+        setDebugInfo(d => ({ ...d, state: d.state + " (scene-timeout)" }));
+      }
+      // Regardless of hasLoaded, try to ensure the videosphere has a working texture.
+      // On iOS, the videosphere mesh might exist but the material src never resolved.
+      const sphere = videosphereRef.current;
+      const vid = videoRef.current;
+      if (sphere && vid) {
+        const mesh = sphere.getObject3D?.("mesh");
+        if (mesh && !mesh.material?.map) {
+          console.warn("Videosphere has no texture map — applying video texture manually");
+          try {
+            const THREE = (window as any).AFRAME.THREE;
+            const tex = new THREE.VideoTexture(vid);
+            tex.minFilter = THREE.LinearFilter;
+            tex.magFilter = THREE.LinearFilter;
+            tex.format = THREE.RGBAFormat;
+            mesh.material.map = tex;
+            mesh.material.needsUpdate = true;
+            setDebugInfo(d => ({ ...d, textureStatus: "manual-fix" }));
+          } catch (e) {
+            console.error("Manual texture setup failed:", e);
+          }
+        } else if (!mesh) {
+          // No mesh at all — scene init failed completely. Try creating geometry manually.
+          console.warn("No mesh on videosphere — creating geometry manually");
+          try {
+            const THREE = (window as any).AFRAME.THREE;
+            const geometry = new THREE.SphereGeometry(500, 60, 40);
+            geometry.scale(-1, 1, 1); // Invert for inside-out rendering
+            const tex = new THREE.VideoTexture(vid);
+            tex.minFilter = THREE.LinearFilter;
+            tex.magFilter = THREE.LinearFilter;
+            const material = new THREE.MeshBasicMaterial({ map: tex });
+            const sphereMesh = new THREE.Mesh(geometry, material);
+            // Apply rotation
+            const iosRot = isIOSSafari();
+            sphereMesh.rotation.set(0, -Math.PI / 2, iosRot ? -Math.PI / 2 : 0);
+            sphere.setObject3D("mesh", sphereMesh);
+            setDebugInfo(d => ({ ...d, textureStatus: "manual-mesh" }));
+            console.log("Manual mesh created successfully");
+          } catch (e) {
+            console.error("Manual mesh creation failed:", e);
+          }
+        }
+      }
+    }, 5000);
 
     let lastInteractionAt = 0;
     const handleSceneInteraction = () => {
@@ -394,6 +451,7 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
     scene.addEventListener("touchend", handleSceneInteraction);
 
     return () => {
+      clearTimeout(sceneLoadTimeout);
       scene.removeEventListener("click", handleSceneInteraction);
       scene.removeEventListener("touchend", handleSceneInteraction);
 
@@ -412,7 +470,7 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
         if (sceneEl.destroy) sceneEl.destroy();
         scene.remove();
       }
-      // Clean up video element placed outside the scene (iOS path)
+      // Clean up any orphaned video element
       const orphanedVideo = document.getElementById(videoIdRef.current);
       if (orphanedVideo?.parentNode) {
         orphanedVideo.remove();
