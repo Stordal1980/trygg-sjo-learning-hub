@@ -446,6 +446,24 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
         try {
           // Tell A-Frame the scene is loaded so play() can start the render loop
           sceneEl.hasLoaded = true;
+
+          // CRITICAL: Manually load all child entities that were waiting for scene.hasLoaded.
+          // In A-Frame, entity.connectedCallback() only calls entity.load() if scene.hasLoaded
+          // is true. Since the scene was stuck, entities never loaded — their components
+          // (canvas-video-texture, look-controls, etc.) never called init().
+          // We must load them now before calling play().
+          const allChildren = sceneEl.querySelectorAll("*");
+          allChildren.forEach((el: any) => {
+            if (typeof el.load === "function" && !el.hasLoaded) {
+              try {
+                el.load();
+                console.log("Force-loaded entity:", el.tagName);
+              } catch (loadErr) {
+                console.warn("Failed to load entity:", el.tagName, loadErr);
+              }
+            }
+          });
+
           sceneEl.emit("loaded");
 
           // play() starts the render loop AND component ticking (look-controls, canvas-video-texture)
