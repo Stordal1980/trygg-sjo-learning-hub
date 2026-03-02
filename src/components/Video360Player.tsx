@@ -1,5 +1,17 @@
 import { useRef, useEffect, useState } from "react";
 
+const isIOSSafari = (): boolean => {
+  const ua = navigator.userAgent;
+  const isIOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const isSafari = /Safari/.test(ua) && !/Chrome|CriOS|FxiOS|EdgiOS/.test(ua);
+  return isIOS && isSafari;
+};
+
+const isMobileDevice = (): boolean => {
+  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
+    || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+};
+
 interface Video360PlayerProps {
   videoUrl: string;
 }
@@ -16,6 +28,8 @@ interface DebugInfo {
   browser: string;
   maxTexSize: number;
   texSizeOk: string;
+  isIOS: boolean;
+  retryCount: number;
 }
 
 export function Video360Player({ videoUrl }: Video360PlayerProps) {
@@ -39,10 +53,16 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
     browser: "",
     maxTexSize: 0,
     texSizeOk: "?",
+    isIOS: false,
+    retryCount: 0,
   });
 
   useEffect(() => {
-    setDebugInfo((d) => ({ ...d, browser: navigator.userAgent.slice(0, 80) }));
+    setDebugInfo((d) => ({
+      ...d,
+      browser: navigator.userAgent.slice(0, 80),
+      isIOS: isIOSSafari(),
+    }));
     // Check GPU max texture size
     try {
       const c = document.createElement("canvas");
@@ -93,36 +113,67 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
     return () => clearInterval(interval);
   }, [debugInfo.maxTexSize]);
 
-  const ensureVideoReady = async (video: HTMLVideoElement): Promise<boolean> => {
-    if (video.readyState >= 2) return true;
+  // Play the video with retry and exponential backoff.
+  // CRITICAL: call this synchronously from user gesture handler — no awaits before video.play().
+  // On iOS, play() itself triggers loading + playback. Do NOT call load() first.
+  const attemptPlay = async (
+    video: HTMLVideoElement,
+    maxRetries: number = 3
+  ): Promise<void> => {
+    video.muted = true;
 
-    return new Promise<boolean>((resolve) => {
-      let finished = false;
-      const finish = (ok: boolean) => {
-        if (finished) return;
-        finished = true;
-        cleanup();
-        resolve(ok);
-      };
+    let lastError: unknown;
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        if (attempt > 0) {
+          const delay = Math.min(300 * Math.pow(2, attempt - 1), 2000);
+          await new Promise(r => setTimeout(r, delay));
+          setDebugInfo(d => ({ ...d, state: `retry-${attempt}`, retryCount: attempt }));
+        }
 
-      const onReady = () => finish(true);
-      const onError = () => finish(false);
-      const onTimeout = () => finish(video.readyState >= 2 && video.networkState !== HTMLMediaElement.NETWORK_NO_SOURCE);
+        await video.play();
 
-      const cleanup = () => {
-        video.removeEventListener("loadeddata", onReady);
-        video.removeEventListener("canplay", onReady);
-        video.removeEventListener("error", onError);
-        clearTimeout(timeoutId);
-      };
+        // Success
+        setIsPlaying(true);
+        setFatalError(null);
+        setDebugInfo(d => ({ ...d, state: "playing", retryCount: attempt }));
 
-      const timeoutId = window.setTimeout(onTimeout, 4000);
+        // Auto-unmute after 500ms of stable playback
+        setTimeout(() => {
+          try {
+            if (videoRef.current && !videoRef.current.paused) {
+              videoRef.current.muted = false;
+            }
+          } catch (_) {}
+        }, 500);
 
-      video.addEventListener("loadeddata", onReady, { once: true });
-      video.addEventListener("canplay", onReady, { once: true });
-      video.addEventListener("error", onError, { once: true });
-      video.load();
-    });
+        return;
+      } catch (err) {
+        lastError = err;
+        const message = err instanceof Error ? err.message : String(err);
+        console.warn(`Play attempt ${attempt + 1}/${maxRetries} failed:`, message);
+
+        // NotAllowedError or not-supported won't be fixed by retrying
+        if (
+          message.toLowerCase().includes("not supported") ||
+          message.toLowerCase().includes("not allowed") ||
+          message.toLowerCase().includes("notallowederror")
+        ) {
+          break;
+        }
+      }
+    }
+
+    // All retries exhausted
+    const message = lastError instanceof Error ? (lastError as Error).message : String(lastError);
+    if (message.toLowerCase().includes("not supported")) {
+      setFatalError("Videokilden st\u00f8ttes ikke p\u00e5 iPhone Safari (bruk MP4/H.264 + AAC).");
+    } else if (message.toLowerCase().includes("not allowed")) {
+      setFatalError("Trykk p\u00e5 play-knappen for \u00e5 starte videoen (iOS krever brukerinteraksjon).");
+    } else {
+      setFatalError(`Kunne ikke spille av video: ${message}`);
+    }
+    setDebugInfo(d => ({ ...d, state: `play-error: ${message}` }));
   };
 
   useEffect(() => {
@@ -142,8 +193,16 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
           this.canvas = document.createElement("canvas");
           this.ctx = this.canvas.getContext("2d");
           this.textureReady = false;
+          this._elapsed = 0;
         },
-        tick: function () {
+        tick: function (_time: number, timeDelta: number) {
+          // Throttle on mobile: ~30fps cap to reduce GPU memory pressure
+          if (isMobileDevice()) {
+            this._elapsed = (this._elapsed || 0) + timeDelta;
+            if (this._elapsed < 33) return;
+            this._elapsed = 0;
+          }
+
           const srcAttr = this.el.getAttribute("src");
           const videoId = srcAttr ? srcAttr.replace("#", "") : null;
           const video = videoId ? document.getElementById(videoId) as HTMLVideoElement : null;
@@ -189,7 +248,7 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
           if (this.canvas.width !== cw || this.canvas.height !== ch) {
             this.canvas.width = cw;
             this.canvas.height = ch;
-            console.log(`Canvas texture: scaling ${vw}x${vh} → ${cw}x${ch} (maxTex: ${maxTex})`);
+            console.log(`Canvas texture: scaling ${vw}x${vh} \u2192 ${cw}x${ch} (maxTex: ${maxTex})`);
           }
 
           // Draw video frame to canvas
@@ -231,7 +290,6 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
     scene.style.zIndex = "1";
     sceneRef.current = scene;
 
-    const assets = document.createElement("a-assets");
     const video = document.createElement("video");
     video.id = videoIdRef.current;
     video.src = videoUrl;
@@ -247,7 +305,7 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
     }
     video.muted = true;
     video.setAttribute("muted", "");
-    video.preload = "metadata";
+    video.preload = isIOSSafari() ? "none" : "auto";
     video.playsInline = true;
     (video as any).webkitPlaysInline = true;
     video.autoplay = false;
@@ -267,7 +325,7 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
       const code = video.error?.code ?? 0;
       const noSource = video.networkState === HTMLMediaElement.NETWORK_NO_SOURCE;
       const reason = noSource || code === 4
-        ? "Ingen støttet videokilde (iOS Safari krever MP4/H.264 + AAC)."
+        ? "Ingen st\u00f8ttet videokilde (iOS Safari krever MP4/H.264 + AAC)."
         : `Videofeil (kode ${code}).`;
 
       setFatalError(reason);
@@ -275,8 +333,23 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
       console.error("360 video error:", video.error);
     });
 
-    assets.appendChild(video);
-    scene.appendChild(assets);
+    if (isIOSSafari()) {
+      // On iOS: place video OUTSIDE a-assets to avoid A-Frame's asset timeout mechanism.
+      // A-Frame's asset system expects to control loading, but iOS won't preload video
+      // without a user gesture, causing a premature timeout failure.
+      // a-videosphere finds the video by ID via document.querySelector — works fine outside a-assets.
+      container.appendChild(video);
+      video.style.display = "none";
+
+      const assets = document.createElement("a-assets");
+      assets.setAttribute("timeout", "30000");
+      scene.appendChild(assets);
+    } else {
+      const assets = document.createElement("a-assets");
+      assets.setAttribute("timeout", "30000");
+      assets.appendChild(video);
+      scene.appendChild(assets);
+    }
 
     const videosphere = document.createElement("a-videosphere");
     videosphere.setAttribute("src", `#${videoIdRef.current}`);
@@ -298,36 +371,16 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
     });
 
     let lastInteractionAt = 0;
-    const handleSceneInteraction = async () => {
+    const handleSceneInteraction = () => {
       const now = Date.now();
       if (now - lastInteractionAt < 250) return;
       lastInteractionAt = now;
 
-      if (video.paused) {
-        try {
-          // Ensure loaded before play (iOS fix)
-          const isReady = await ensureVideoReady(video);
-          if (!isReady) {
-            setFatalError("Kunne ikke laste videokilden på iPhone Safari.");
-            setDebugInfo((d) => ({ ...d, state: "source-not-supported" }));
-            return;
-          }
-          video.muted = true;
-          await video.play();
-          setIsPlaying(true);
-          setFatalError(null);
-          setTimeout(() => {
-            try { if (videoRef.current) videoRef.current.muted = false; } catch (_) {}
-          }, 500);
-          setDebugInfo((d) => ({ ...d, state: "playing" }));
-        } catch (err) {
-          const message = err instanceof Error ? err.message : String(err);
-          if (message.toLowerCase().includes("not supported")) {
-            setFatalError("Videokilden støttes ikke på iPhone Safari (bruk MP4/H.264 + AAC).");
-          }
-          setDebugInfo((d) => ({ ...d, state: `play-error: ${message}` }));
-        }
-        return;
+      const vid = videoRef.current;
+      if (!vid) return;
+
+      if (vid.paused) {
+        void attemptPlay(vid);
       }
     };
 
@@ -337,6 +390,14 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
     return () => {
       scene.removeEventListener("click", handleSceneInteraction);
       scene.removeEventListener("touchend", handleSceneInteraction);
+
+      // Pause and clean up video
+      if (videoRef.current) {
+        videoRef.current.pause();
+        videoRef.current.removeAttribute("src");
+        videoRef.current.load();
+      }
+
       videoRef.current = null;
       videosphereRef.current = null;
       sceneRef.current = null;
@@ -345,40 +406,21 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
         if (sceneEl.destroy) sceneEl.destroy();
         scene.remove();
       }
+      // Clean up video element placed outside the scene (iOS path)
+      const orphanedVideo = document.getElementById(videoIdRef.current);
+      if (orphanedVideo?.parentNode) {
+        orphanedVideo.remove();
+      }
     };
   }, [aframeLoaded, videoUrl]);
 
-  const handlePlayClick = async () => {
+  const handlePlayClick = () => {
     const video = videoRef.current;
     if (!video) return;
 
-    const isReady = await ensureVideoReady(video);
-    if (!isReady) {
-      setFatalError("Kunne ikke laste videokilden på iPhone Safari.");
-      setDebugInfo((d) => ({ ...d, state: "source-not-supported" }));
-      return;
-    }
-
-    // Always start muted for maximum compatibility
-    video.muted = true;
-
-    try {
-      await video.play();
-      setIsPlaying(true);
-      setFatalError(null);
-      setDebugInfo((d) => ({ ...d, state: "playing" }));
-      // Auto-unmute after stable playback
-      setTimeout(() => {
-        try { if (videoRef.current) videoRef.current.muted = false; } catch (_) {}
-      }, 500);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      console.error("Play failed:", err);
-      if (message.toLowerCase().includes("not supported")) {
-        setFatalError("Videokilden støttes ikke på iPhone Safari (bruk MP4/H.264 + AAC).");
-      }
-      setDebugInfo((d) => ({ ...d, state: `play-error: ${message}` }));
-    }
+    // CRITICAL: Call attemptPlay synchronously from the click handler.
+    // Do NOT await anything before video.play() — iOS requires it in the gesture chain.
+    void attemptPlay(video);
   };
 
   return (
@@ -400,6 +442,7 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
         <div><b>Muted:</b> {debugInfo.muted ? "yes" : "no"} | <b>Ready:</b> {debugInfo.readyState} | <b>Net:</b> {debugInfo.networkState}</div>
         <div><b>Texture:</b> {debugInfo.textureStatus} | <b>Scene:</b> {debugInfo.sceneLoaded ? "loaded" : "not loaded"}</div>
         <div><b>MaxTexSize:</b> {debugInfo.maxTexSize} | <b>TexFit:</b> {debugInfo.texSizeOk}</div>
+        <div><b>iOS:</b> {debugInfo.isIOS ? "yes" : "no"} | <b>Retries:</b> {debugInfo.retryCount}</div>
         <div style={{ fontSize: "10px", opacity: 0.7 }}><b>UA:</b> {debugInfo.browser}</div>
       </div>
       {fatalError ? (
@@ -411,7 +454,7 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
             rel="noreferrer"
             className="text-sm font-medium text-primary underline"
           >
-            Åpne video i ny fane
+            {"\u00C5"}pne video i ny fane
           </a>
         </div>
       ) : (
@@ -426,7 +469,7 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
               onClick={(event) => {
                 event.preventDefault();
                 event.stopPropagation();
-                void handlePlayClick();
+                handlePlayClick();
               }}
               style={{
                 position: "absolute",
