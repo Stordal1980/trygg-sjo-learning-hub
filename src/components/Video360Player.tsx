@@ -250,11 +250,21 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
 
       if (video.paused) {
         try {
+          // Ensure loaded before play (iOS fix)
+          if (video.readyState < 2) {
+            video.load();
+            await new Promise<void>((resolve) => {
+              const onReady = () => { video.removeEventListener("loadeddata", onReady); resolve(); };
+              video.addEventListener("loadeddata", onReady);
+              setTimeout(resolve, 3000);
+            });
+          }
           video.muted = true;
           await video.play();
           setIsPlaying(true);
-          // Auto-unmute after playback starts
-          setTimeout(() => { if (videoRef.current) videoRef.current.muted = false; }, 300);
+          setTimeout(() => {
+            try { if (videoRef.current) videoRef.current.muted = false; } catch (_) {}
+          }, 500);
           setDebugInfo((d) => ({ ...d, state: "playing" }));
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
@@ -285,34 +295,32 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
     const video = videoRef.current;
     if (!video) return;
 
-    const isMobileDevice = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+    // Ensure video is ready before playing (fixes iOS "operation not supported")
+    if (video.readyState < 2) {
+      video.load();
+      await new Promise<void>((resolve) => {
+        const onReady = () => { video.removeEventListener("loadeddata", onReady); resolve(); };
+        video.addEventListener("loadeddata", onReady);
+        // Timeout fallback
+        setTimeout(resolve, 3000);
+      });
+    }
+
+    // Always start muted for maximum compatibility
+    video.muted = true;
 
     try {
-      if (isMobileDevice) {
-        video.muted = true;
-        await video.play();
-        setIsPlaying(true);
-        setTimeout(() => { if (videoRef.current) videoRef.current.muted = false; }, 300);
-        setDebugInfo((d) => ({ ...d, state: "playing" }));
-        return;
-      }
-
-      video.muted = false;
       await video.play();
       setIsPlaying(true);
-      setDebugInfo((d) => ({ ...d, state: "playing (user gesture)" }));
+      setDebugInfo((d) => ({ ...d, state: "playing" }));
+      // Auto-unmute after stable playback
+      setTimeout(() => {
+        try { if (videoRef.current) videoRef.current.muted = false; } catch (_) {}
+      }, 500);
     } catch (err) {
-      try {
-        video.muted = true;
-        await video.play();
-        setIsPlaying(true);
-        setDebugInfo((d) => ({ ...d, state: "playing" }));
-        setTimeout(() => { if (videoRef.current) videoRef.current.muted = false; }, 300);
-      } catch (fallbackErr) {
-        const message = fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr);
-        console.error("Play failed:", fallbackErr);
-        setDebugInfo((d) => ({ ...d, state: `play-error: ${message}` }));
-      }
+      const message = err instanceof Error ? err.message : String(err);
+      console.error("Play failed:", err);
+      setDebugInfo((d) => ({ ...d, state: `play-error: ${message}` }));
     }
   };
 
