@@ -26,6 +26,7 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
   const videoIdRef = useRef(`vid360-${Math.random().toString(36).slice(2, 9)}`);
   const [aframeLoaded, setAframeLoaded] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [fatalError, setFatalError] = useState<string | null>(null);
   const [debugInfo, setDebugInfo] = useState<DebugInfo>({
     state: "init",
     time: 0,
@@ -92,8 +93,43 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
     return () => clearInterval(interval);
   }, [debugInfo.maxTexSize]);
 
+  const ensureVideoReady = async (video: HTMLVideoElement): Promise<boolean> => {
+    if (video.readyState >= 2) return true;
+
+    return new Promise<boolean>((resolve) => {
+      let finished = false;
+      const finish = (ok: boolean) => {
+        if (finished) return;
+        finished = true;
+        cleanup();
+        resolve(ok);
+      };
+
+      const onReady = () => finish(true);
+      const onError = () => finish(false);
+      const onTimeout = () => finish(video.readyState >= 2 && video.networkState !== HTMLMediaElement.NETWORK_NO_SOURCE);
+
+      const cleanup = () => {
+        video.removeEventListener("loadeddata", onReady);
+        video.removeEventListener("canplay", onReady);
+        video.removeEventListener("error", onError);
+        clearTimeout(timeoutId);
+      };
+
+      const timeoutId = window.setTimeout(onTimeout, 4000);
+
+      video.addEventListener("loadeddata", onReady, { once: true });
+      video.addEventListener("canplay", onReady, { once: true });
+      video.addEventListener("error", onError, { once: true });
+      video.load();
+    });
+  };
+
   useEffect(() => {
     if (!aframeLoaded || !containerRef.current) return;
+
+    setFatalError(null);
+    setIsPlaying(false);
 
     const AFRAME = (window as any).AFRAME;
 
@@ -199,6 +235,7 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
     const video = document.createElement("video");
     video.id = videoIdRef.current;
     video.src = videoUrl;
+    video.setAttribute("src", videoUrl);
     video.setAttribute("playsinline", "");
     video.setAttribute("webkit-playsinline", "");
     video.setAttribute("loop", "true");
@@ -210,7 +247,7 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
     }
     video.muted = true;
     video.setAttribute("muted", "");
-    video.preload = "auto";
+    video.preload = "metadata";
     video.playsInline = true;
     (video as any).webkitPlaysInline = true;
     video.autoplay = false;
@@ -227,7 +264,14 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
     video.addEventListener("stalled", updateState("stalled", false));
     video.addEventListener("loadeddata", updateState("loadeddata"));
     video.addEventListener("error", () => {
-      setDebugInfo((d) => ({ ...d, state: `error: ${video.error?.code}` }));
+      const code = video.error?.code ?? 0;
+      const noSource = video.networkState === HTMLMediaElement.NETWORK_NO_SOURCE;
+      const reason = noSource || code === 4
+        ? "Ingen støttet videokilde (iOS Safari krever MP4/H.264 + AAC)."
+        : `Videofeil (kode ${code}).`;
+
+      setFatalError(reason);
+      setDebugInfo((d) => ({ ...d, state: `error: ${code}` }));
       console.error("360 video error:", video.error);
     });
 
@@ -262,23 +306,25 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
       if (video.paused) {
         try {
           // Ensure loaded before play (iOS fix)
-          if (video.readyState < 2) {
-            video.load();
-            await new Promise<void>((resolve) => {
-              const onReady = () => { video.removeEventListener("loadeddata", onReady); resolve(); };
-              video.addEventListener("loadeddata", onReady);
-              setTimeout(resolve, 3000);
-            });
+          const isReady = await ensureVideoReady(video);
+          if (!isReady) {
+            setFatalError("Kunne ikke laste videokilden på iPhone Safari.");
+            setDebugInfo((d) => ({ ...d, state: "source-not-supported" }));
+            return;
           }
           video.muted = true;
           await video.play();
           setIsPlaying(true);
+          setFatalError(null);
           setTimeout(() => {
             try { if (videoRef.current) videoRef.current.muted = false; } catch (_) {}
           }, 500);
           setDebugInfo((d) => ({ ...d, state: "playing" }));
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
+          if (message.toLowerCase().includes("not supported")) {
+            setFatalError("Videokilden støttes ikke på iPhone Safari (bruk MP4/H.264 + AAC).");
+          }
           setDebugInfo((d) => ({ ...d, state: `play-error: ${message}` }));
         }
         return;
@@ -306,15 +352,11 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
     const video = videoRef.current;
     if (!video) return;
 
-    // Ensure video is ready before playing (fixes iOS "operation not supported")
-    if (video.readyState < 2) {
-      video.load();
-      await new Promise<void>((resolve) => {
-        const onReady = () => { video.removeEventListener("loadeddata", onReady); resolve(); };
-        video.addEventListener("loadeddata", onReady);
-        // Timeout fallback
-        setTimeout(resolve, 3000);
-      });
+    const isReady = await ensureVideoReady(video);
+    if (!isReady) {
+      setFatalError("Kunne ikke laste videokilden på iPhone Safari.");
+      setDebugInfo((d) => ({ ...d, state: "source-not-supported" }));
+      return;
     }
 
     // Always start muted for maximum compatibility
@@ -323,6 +365,7 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
     try {
       await video.play();
       setIsPlaying(true);
+      setFatalError(null);
       setDebugInfo((d) => ({ ...d, state: "playing" }));
       // Auto-unmute after stable playback
       setTimeout(() => {
@@ -331,6 +374,9 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       console.error("Play failed:", err);
+      if (message.toLowerCase().includes("not supported")) {
+        setFatalError("Videokilden støttes ikke på iPhone Safari (bruk MP4/H.264 + AAC).");
+      }
       setDebugInfo((d) => ({ ...d, state: `play-error: ${message}` }));
     }
   };
@@ -356,42 +402,56 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
         <div><b>MaxTexSize:</b> {debugInfo.maxTexSize} | <b>TexFit:</b> {debugInfo.texSizeOk}</div>
         <div style={{ fontSize: "10px", opacity: 0.7 }}><b>UA:</b> {debugInfo.browser}</div>
       </div>
-      <div style={{ position: "relative" }}>
-        <div
-          ref={containerRef}
-          className="w-full rounded-lg overflow-hidden"
-          style={{ height: "400px", position: "relative" }}
-        />
-        {!isPlaying && (
-          <button
-            onClick={(event) => {
-              event.preventDefault();
-              event.stopPropagation();
-              void handlePlayClick();
-            }}
-            style={{
-              position: "absolute",
-              top: "50%",
-              left: "50%",
-              transform: "translate(-50%, -50%)",
-              zIndex: 10,
-              background: "rgba(0,0,0,0.7)",
-              border: "3px solid white",
-              borderRadius: "50%",
-              width: "80px",
-              height: "80px",
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
+      {fatalError ? (
+        <div className="w-full h-[400px] rounded-lg border border-border bg-muted flex flex-col items-center justify-center gap-3 p-4 text-center">
+          <p className="text-sm text-foreground">{fatalError}</p>
+          <a
+            href={videoUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="text-sm font-medium text-primary underline"
           >
-            <svg width="36" height="36" viewBox="0 0 24 24" fill="white">
-              <polygon points="5,3 19,12 5,21" />
-            </svg>
-          </button>
-        )}
-      </div>
+            Åpne video i ny fane
+          </a>
+        </div>
+      ) : (
+        <div style={{ position: "relative" }}>
+          <div
+            ref={containerRef}
+            className="w-full rounded-lg overflow-hidden"
+            style={{ height: "400px", position: "relative" }}
+          />
+          {!isPlaying && (
+            <button
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                void handlePlayClick();
+              }}
+              style={{
+                position: "absolute",
+                top: "50%",
+                left: "50%",
+                transform: "translate(-50%, -50%)",
+                zIndex: 10,
+                background: "rgba(0,0,0,0.7)",
+                border: "3px solid white",
+                borderRadius: "50%",
+                width: "80px",
+                height: "80px",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <svg width="36" height="36" viewBox="0 0 24 24" fill="white">
+                <polygon points="5,3 19,12 5,21" />
+              </svg>
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }
