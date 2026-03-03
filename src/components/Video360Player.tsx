@@ -7,9 +7,19 @@ const isIOSSafari = (): boolean => {
   return isIOS && isSafari;
 };
 
+const isIOSDevice = (): boolean => {
+  return /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+};
+
 const isMobileDevice = (): boolean => {
   return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
     || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+};
+
+const getIOSVersion = (): number | null => {
+  const match = navigator.userAgent.match(/CPU (?:iPhone )?OS (\d+)/);
+  return match ? parseInt(match[1], 10) : null;
 };
 
 interface Video360PlayerProps {
@@ -31,6 +41,7 @@ interface DebugInfo {
   isIOS: boolean;
   retryCount: number;
   videoSrc: string;
+  renderer: string;
 }
 
 export function Video360Player({ videoUrl }: Video360PlayerProps) {
@@ -57,16 +68,16 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
     isIOS: false,
     retryCount: 0,
     videoSrc: "",
+    renderer: "?",
   });
 
   useEffect(() => {
     setDebugInfo((d) => ({
       ...d,
       browser: navigator.userAgent.slice(0, 80),
-      isIOS: isIOSSafari(),
+      isIOS: isIOSDevice(),
       videoSrc: videoUrl.slice(0, 60),
     }));
-    // Check GPU max texture size
     try {
       const c = document.createElement("canvas");
       const gl = c.getContext("webgl") || c.getContext("experimental-webgl");
@@ -77,7 +88,7 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
     } catch (e) {}
   }, []);
 
-  // Load A-Frame dynamically
+  // Load A-Frame dynamically (needed for Three.js even in fallback mode)
   useEffect(() => {
     if ((window as any).AFRAME) {
       setAframeLoaded(true);
@@ -94,8 +105,17 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
       const scene = sceneRef.current;
 
       if (video) {
-        const mesh = sphere?.getObject3D?.("mesh");
-        const hasMap = !!(mesh?.material?.map);
+        // For A-Frame path, check sphere entity
+        let textureStatus = "n/a";
+        if (sphere?.getObject3D) {
+          const mesh = sphere.getObject3D("mesh");
+          const hasMap = !!(mesh?.material?.map);
+          textureStatus = mesh ? (hasMap ? "OK" : "no map") : "no mesh";
+        } else if (sphere?.material) {
+          // Three.js fallback path — sphere IS the mesh directly
+          textureStatus = sphere.material.map ? "OK" : "no map";
+        }
+
         const maxTex = debugInfo.maxTexSize;
         const oversized = video.videoWidth > maxTex || video.videoHeight > maxTex;
 
@@ -106,8 +126,8 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
           muted: video.muted,
           readyState: video.readyState,
           networkState: video.networkState,
-          textureStatus: mesh ? (hasMap ? "OK" : "no map") : "no mesh",
-          sceneLoaded: !!(scene as any)?.hasLoaded,
+          textureStatus,
+          sceneLoaded: scene ? (!!(scene as any)?.hasLoaded || d.renderer === "three.js") : false,
           texSizeOk: maxTex === 0 ? "?" : (oversized ? `OVER (max ${maxTex})` : "OK"),
         }));
       }
@@ -117,8 +137,6 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
   }, [debugInfo.maxTexSize]);
 
   // Play the video with retry and exponential backoff.
-  // CRITICAL: call this synchronously from user gesture handler — no awaits before video.play().
-  // On iOS, play() itself triggers loading + playback. Do NOT call load() first.
   const attemptPlay = async (
     video: HTMLVideoElement,
     maxRetries: number = 3
@@ -136,12 +154,10 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
 
         await video.play();
 
-        // Success
         setIsPlaying(true);
         setFatalError(null);
         setDebugInfo(d => ({ ...d, state: "playing", retryCount: attempt }));
 
-        // Auto-unmute after 500ms of stable playback
         setTimeout(() => {
           try {
             if (videoRef.current && !videoRef.current.paused) {
@@ -156,7 +172,6 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
         const message = err instanceof Error ? err.message : String(err);
         console.warn(`Play attempt ${attempt + 1}/${maxRetries} failed:`, message);
 
-        // NotAllowedError or not-supported won't be fixed by retrying
         if (
           message.toLowerCase().includes("not supported") ||
           message.toLowerCase().includes("not allowed") ||
@@ -167,28 +182,192 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
       }
     }
 
-    // All retries exhausted
     const message = lastError instanceof Error ? (lastError as Error).message : String(lastError);
     if (message.toLowerCase().includes("not supported")) {
-      setFatalError("Videokilden st\u00f8ttes ikke p\u00e5 iPhone Safari (bruk MP4/H.264 + AAC).");
+      setFatalError("Videokilden st\u00f8ttes ikke p\u00e5 denne enheten (bruk MP4/H.264 + AAC).");
     } else if (message.toLowerCase().includes("not allowed")) {
-      setFatalError("Trykk p\u00e5 play-knappen for \u00e5 starte videoen (iOS krever brukerinteraksjon).");
+      setFatalError("Trykk p\u00e5 play-knappen for \u00e5 starte videoen.");
     } else {
       setFatalError(`Kunne ikke spille av video: ${message}`);
     }
     setDebugInfo(d => ({ ...d, state: `play-error: ${message}` }));
   };
 
-  useEffect(() => {
-    if (!aframeLoaded || !containerRef.current) return;
+  // ─── Create a shared video element ───────────────────────────────────
+  const createVideoElement = (container: HTMLElement): HTMLVideoElement => {
+    const video = document.createElement("video");
+    video.id = videoIdRef.current;
+    video.src = videoUrl;
+    video.setAttribute("playsinline", "");
+    video.setAttribute("webkit-playsinline", "");
+    video.setAttribute("loop", "true");
+    const isCrossOrigin = videoUrl.startsWith("http") && !videoUrl.startsWith(window.location.origin);
+    if (isCrossOrigin) {
+      video.crossOrigin = "anonymous";
+      video.setAttribute("crossorigin", "anonymous");
+    }
+    video.muted = true;
+    video.setAttribute("muted", "");
+    video.preload = isIOSDevice() ? "none" : "auto";
+    video.playsInline = true;
+    (video as any).webkitPlaysInline = true;
+    video.autoplay = false;
+    video.style.display = "none";
+    videoRef.current = video;
 
-    setFatalError(null);
-    setIsPlaying(false);
+    // Debug event listeners
+    const updateState = (s: string, playing?: boolean) => () => {
+      setDebugInfo((d) => ({ ...d, state: s }));
+      if (typeof playing === "boolean") setIsPlaying(playing);
+    };
+    video.addEventListener("playing", updateState("playing", true));
+    video.addEventListener("pause", updateState("paused", false));
+    video.addEventListener("waiting", updateState("waiting", false));
+    video.addEventListener("stalled", updateState("stalled"));
+    video.addEventListener("loadeddata", updateState("loadeddata"));
+    video.addEventListener("error", () => {
+      const code = video.error?.code ?? 0;
+      const noSource = video.networkState === HTMLMediaElement.NETWORK_NO_SOURCE;
+      let reason: string;
+      if (noSource || code === 4) {
+        reason = "Videoen kan ikke spilles av p\u00e5 denne enheten. " +
+          "Bruk MP4-format med H.264-video og AAC-lyd.";
+      } else {
+        reason = `Videofeil (kode ${code}).`;
+      }
+      setFatalError(reason);
+      setDebugInfo((d) => ({ ...d, state: `error: code=${code} net=${video.networkState}` }));
+    });
 
+    return video;
+  };
+
+  // ─── THREE.JS FALLBACK — for iOS < 15 where A-Frame fails ───────────
+  const setupThreeJsPlayer = (container: HTMLElement, video: HTMLVideoElement) => {
+    const THREE = (window as any).AFRAME.THREE;
+    const w = container.clientWidth;
+    const h = container.clientHeight;
+
+    setDebugInfo(d => ({ ...d, renderer: "three.js", sceneLoaded: true }));
+    console.log("Using Three.js fallback renderer");
+
+    // Create WebGL renderer
+    const renderer = new THREE.WebGLRenderer({ antialias: false, alpha: false });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(w, h);
+    container.appendChild(renderer.domElement);
+    container.appendChild(video);
+
+    // Scene + camera
+    const scene3 = new THREE.Scene();
+    const camera3 = new THREE.PerspectiveCamera(75, w / h, 1, 1100);
+
+    // Inverted sphere (camera inside looking outward)
+    const geometry = new THREE.SphereGeometry(500, 60, 40);
+    geometry.scale(-1, 1, 1);
+
+    // Canvas-based texture — draw video frames to 2D canvas, use as texture.
+    // This avoids all VideoTexture issues on old iOS.
+    const texCanvas = document.createElement("canvas");
+    texCanvas.width = 2048;
+    texCanvas.height = 1024;
+    const texCtx = texCanvas.getContext("2d")!;
+    const texture = new THREE.CanvasTexture(texCanvas);
+    texture.minFilter = THREE.LinearFilter;
+    texture.magFilter = THREE.LinearFilter;
+
+    const material = new THREE.MeshBasicMaterial({ map: texture });
+    const mesh = new THREE.Mesh(geometry, material);
+
+    // Apply iOS rotation compensation
+    if (isIOSSafari()) {
+      mesh.rotation.set(0, -Math.PI / 2, -Math.PI / 2);
+    } else {
+      mesh.rotation.set(0, -Math.PI / 2, 0);
+    }
+
+    scene3.add(mesh);
+
+    // Store mesh ref for debug
+    videosphereRef.current = mesh;
+    sceneRef.current = { hasLoaded: true };
+
+    // ── Touch/mouse controls ──
+    let dragging = false;
+    let prevX = 0, prevY = 0;
+    let lon = 0, lat = 0;
+
+    const onPointerDown = (e: PointerEvent) => {
+      dragging = true;
+      prevX = e.clientX;
+      prevY = e.clientY;
+    };
+    const onPointerMove = (e: PointerEvent) => {
+      if (!dragging) return;
+      lon += (prevX - e.clientX) * 0.2;
+      lat += (e.clientY - prevY) * 0.2;
+      lat = Math.max(-85, Math.min(85, lat));
+      prevX = e.clientX;
+      prevY = e.clientY;
+    };
+    const onPointerUp = () => { dragging = false; };
+
+    renderer.domElement.addEventListener("pointerdown", onPointerDown);
+    renderer.domElement.addEventListener("pointermove", onPointerMove);
+    renderer.domElement.addEventListener("pointerup", onPointerUp);
+    renderer.domElement.addEventListener("pointerleave", onPointerUp);
+
+    // Click/tap on renderer to play
+    renderer.domElement.addEventListener("click", () => {
+      if (video.paused) void attemptPlay(video);
+    });
+
+    // ── Render loop ──
+    let rafId: number;
+    const animate = () => {
+      rafId = requestAnimationFrame(animate);
+
+      // Draw video frame to 2D canvas → CanvasTexture
+      if (video.readyState >= 2 && video.videoWidth > 0) {
+        texCtx.drawImage(video, 0, 0, texCanvas.width, texCanvas.height);
+        texture.needsUpdate = true;
+      }
+
+      // Update camera orientation from lon/lat
+      const phi = THREE.MathUtils.degToRad(90 - lat);
+      const theta = THREE.MathUtils.degToRad(lon);
+      const target = new THREE.Vector3(
+        500 * Math.sin(phi) * Math.cos(theta),
+        500 * Math.cos(phi),
+        500 * Math.sin(phi) * Math.sin(theta)
+      );
+      camera3.lookAt(target);
+
+      renderer.render(scene3, camera3);
+    };
+    animate();
+
+    // Return cleanup function
+    return () => {
+      cancelAnimationFrame(rafId);
+      renderer.domElement.removeEventListener("pointerdown", onPointerDown);
+      renderer.domElement.removeEventListener("pointermove", onPointerMove);
+      renderer.domElement.removeEventListener("pointerup", onPointerUp);
+      renderer.domElement.removeEventListener("pointerleave", onPointerUp);
+      geometry.dispose();
+      material.dispose();
+      texture.dispose();
+      renderer.dispose();
+    };
+  };
+
+  // ─── A-FRAME RENDERER — for modern browsers ─────────────────────────
+  const setupAFramePlayer = (container: HTMLElement, video: HTMLVideoElement) => {
     const AFRAME = (window as any).AFRAME;
 
-    // Register component that draws video to a canvas (downscaled) and uses that as texture
-    // This fixes Samsung Internet where video textures larger than MAX_TEXTURE_SIZE show black
+    setDebugInfo(d => ({ ...d, renderer: "aframe" }));
+
+    // Register canvas-video-texture component
     if (!AFRAME.components["canvas-video-texture"]) {
       AFRAME.registerComponent("canvas-video-texture", {
         schema: { maxSize: { type: "int", default: 2048 } },
@@ -199,7 +378,6 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
           this._elapsed = 0;
         },
         tick: function (_time: number, timeDelta: number) {
-          // Throttle on mobile: ~30fps cap to reduce GPU memory pressure
           if (isMobileDevice()) {
             this._elapsed = (this._elapsed || 0) + timeDelta;
             if (this._elapsed < 33) return;
@@ -208,32 +386,24 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
 
           const srcAttr = this.el.getAttribute("src");
           const videoId = srcAttr ? srcAttr.replace("#", "") : null;
-          const video = videoId ? document.getElementById(videoId) as HTMLVideoElement : null;
-          if (!video || video.readyState < 2) return;
+          const vid = videoId ? document.getElementById(videoId) as HTMLVideoElement : null;
+          if (!vid || vid.readyState < 2) return;
 
-          const vw = video.videoWidth;
-          const vh = video.videoHeight;
+          const vw = vid.videoWidth;
+          const vh = vid.videoHeight;
           if (!vw || !vh) return;
 
-          // Check if we need the canvas workaround
           const renderer = this.el.sceneEl?.renderer;
           if (!renderer) return;
           const gl = renderer.getContext();
           const maxTex = gl.getParameter(gl.MAX_TEXTURE_SIZE);
 
-          // Old device detection: cap at 1920 for GPUs with MAX_TEXTURE_SIZE <= 4096
           const isOldDevice = maxTex <= 4096;
           const oldDeviceCap = isOldDevice ? 1920 : Infinity;
 
-          // Force canvas-based texture on ALL iOS devices.
-          // iOS Safari (especially 14.x) has unreliable THREE.VideoTexture — it gets created
-          // from a video with no data (preload="none") and never recovers on older WebKit.
-          // Drawing video frames to a 2D canvas and using CanvasTexture bypasses this entirely.
-          const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
-            (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+          const isIOS = isIOSDevice();
           const needsCanvas = isIOS || vw > maxTex || vh > maxTex || (isOldDevice && (vw > oldDeviceCap || vh > oldDeviceCap));
           if (!needsCanvas) {
-            // Desktop/Android with normal-sized video — just mark texture for update
             const mesh = this.el.getObject3D("mesh");
             if (mesh?.material?.map) {
               mesh.material.map.needsUpdate = true;
@@ -241,7 +411,6 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
             return;
           }
 
-          // Scale down to fit within limits. On iOS, cap at 2048 for reliable performance.
           const iosCap = isIOS ? 2048 : Infinity;
           const maxSize = Math.min(this.data.maxSize, maxTex, oldDeviceCap, iosCap);
           const aspect = vw / vh;
@@ -257,13 +426,10 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
           if (this.canvas.width !== cw || this.canvas.height !== ch) {
             this.canvas.width = cw;
             this.canvas.height = ch;
-            console.log(`Canvas texture: scaling ${vw}x${vh} \u2192 ${cw}x${ch} (maxTex: ${maxTex})`);
           }
 
-          // Draw video frame to canvas
-          this.ctx.drawImage(video, 0, 0, cw, ch);
+          this.ctx.drawImage(vid, 0, 0, cw, ch);
 
-          // Apply canvas as texture
           const mesh = this.el.getObject3D("mesh");
           if (mesh) {
             const THREE = AFRAME.THREE;
@@ -282,18 +448,12 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
       });
     }
 
-    const container = containerRef.current;
-    container.innerHTML = "";
-
     const scene = document.createElement("a-scene");
     scene.setAttribute("embedded", "");
     scene.setAttribute("vr-mode-ui", "enabled: true");
     scene.setAttribute("loading-screen", "enabled: false");
-    // Disable antialias on mobile — it's expensive and can cause WebGL context creation
-    // to fail silently on older iPhones with limited GPU memory.
     const mobile = isMobileDevice();
     scene.setAttribute("renderer", `colorManagement: false; antialias: ${mobile ? "false" : "true"}`);
-    // Constrain scene within container on iOS Safari
     scene.style.position = "absolute";
     scene.style.top = "0";
     scene.style.left = "0";
@@ -302,72 +462,13 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
     scene.style.zIndex = "1";
     sceneRef.current = scene;
 
-    const video = document.createElement("video");
-    video.id = videoIdRef.current;
-    video.src = videoUrl;
-    video.setAttribute("src", videoUrl);
-    video.setAttribute("playsinline", "");
-    video.setAttribute("webkit-playsinline", "");
-    video.setAttribute("loop", "true");
-    // Only set crossOrigin for cross-origin URLs (not for same-origin or data: URLs)
-    const isCrossOrigin = videoUrl.startsWith("http") && !videoUrl.startsWith(window.location.origin);
-    if (isCrossOrigin) {
-      video.crossOrigin = "anonymous";
-      video.setAttribute("crossorigin", "anonymous");
-    }
-    video.muted = true;
-    video.setAttribute("muted", "");
-    video.preload = isIOSSafari() ? "none" : "auto";
-    video.playsInline = true;
-    (video as any).webkitPlaysInline = true;
-    video.autoplay = false;
-    videoRef.current = video;
-
-    // State event listeners for debug
-    const updateState = (s: string, playing?: boolean) => () => {
-      setDebugInfo((d) => ({ ...d, state: s }));
-      if (typeof playing === "boolean") setIsPlaying(playing);
-    };
-    video.addEventListener("playing", updateState("playing", true));
-    video.addEventListener("pause", updateState("paused", false));
-    video.addEventListener("waiting", updateState("waiting", false));
-    video.addEventListener("stalled", updateState("stalled", false));
-    video.addEventListener("loadeddata", updateState("loadeddata"));
-    video.addEventListener("error", () => {
-      const code = video.error?.code ?? 0;
-      const noSource = video.networkState === HTMLMediaElement.NETWORK_NO_SOURCE;
-      let reason: string;
-      if (noSource || code === 4) {
-        reason = "Videoen kan ikke spilles av p\u00e5 denne enheten. " +
-          "Videofilen bruker sannsynligvis et videoformat (codec) som ikke st\u00f8ttes. " +
-          "Be admin laste opp videoen p\u00e5 nytt i MP4-format med H.264-video og AAC-lyd.";
-      } else {
-        reason = `Videofeil (kode ${code}).`;
-      }
-
-      setFatalError(reason);
-      setDebugInfo((d) => ({ ...d, state: `error: code=${code} net=${video.networkState}` }));
-      console.error("360 video error:", video.error, "networkState:", video.networkState, "src:", videoUrl);
-    });
-
-    // Place video inside <a-scene> as a direct child (NOT inside <a-assets>).
-    // - Putting it inside a-assets blocks scene init until the video is "ready" (30s+ timeout)
-    // - Putting it outside the scene entirely breaks iOS because A-Frame sometimes uses
-    //   sceneEl.querySelector() to resolve src="#id" (not document.querySelector)
-    // - As a direct child of a-scene (outside a-assets), A-Frame ignores it during asset loading
-    //   but can still find it via querySelector for the src="#id" reference.
-    // NO <a-assets> element at all — even empty, it can trigger asset loading logic on iOS.
-    video.style.display = "none";
+    // Video inside scene (not in a-assets)
     scene.appendChild(video);
 
     const videosphere = document.createElement("a-videosphere");
     videosphere.setAttribute("src", `#${videoIdRef.current}`);
-    // iOS Safari applies the video's embedded rotation metadata to WebGL textures,
-    // while Chrome ignores it. This causes a 90° offset on iOS.
-    // Compensate with Z-axis rotation on iOS.
     const iosDevice = isIOSSafari();
     videosphere.setAttribute("rotation", iosDevice ? "0 -90 -90" : "0 -90 0");
-    // Use canvas-video-texture instead of force-texture-update for Samsung compatibility
     videosphere.setAttribute("canvas-video-texture", "maxSize: 4096");
     scene.appendChild(videosphere);
     videosphereRef.current = videosphere;
@@ -377,173 +478,77 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
     camera.setAttribute("wasd-controls", "enabled: false");
     scene.appendChild(camera);
 
-    // Attach scene "loaded" listener BEFORE appending to DOM to avoid race condition
-    // (on some browsers, the event fires synchronously during DOM insertion)
     scene.addEventListener("loaded", () => {
       setDebugInfo((d) => ({ ...d, sceneLoaded: true }));
     });
 
     container.appendChild(scene);
 
-    // Fallback: on iOS 14.x, A-Frame's scene init stalls — hasLoaded stays false,
-    // which means the render loop never starts. Even if we create a perfect mesh+texture,
-    // nothing gets drawn because A-Frame's renderer.render() is never called.
-    //
-    // Fix: after 3 seconds, if the scene hasn't loaded:
-    // 1. Ensure the videosphere has a working mesh+texture
-    // 2. Force-start A-Frame by setting hasLoaded=true and calling play()
-    //    This starts the render loop AND component ticking (look-controls, etc.)
-    // 3. If play() fails, fall back to a manual requestAnimationFrame render loop
-    const sceneLoadTimeout = setTimeout(() => {
-      const sceneEl = scene as any;
-
-      // Step 1: Ensure videosphere has a working texture
-      const sphere = videosphereRef.current;
-      const vid = videoRef.current;
-      if (sphere && vid) {
-        const mesh = sphere.getObject3D?.("mesh");
-        if (mesh && !mesh.material?.map) {
-          console.warn("Videosphere has no texture map — applying video texture manually");
-          try {
-            const THREE = (window as any).AFRAME.THREE;
-            const tex = new THREE.VideoTexture(vid);
-            tex.minFilter = THREE.LinearFilter;
-            tex.magFilter = THREE.LinearFilter;
-            tex.format = THREE.RGBAFormat;
-            mesh.material.map = tex;
-            mesh.material.needsUpdate = true;
-            setDebugInfo(d => ({ ...d, textureStatus: "manual-fix" }));
-          } catch (e) {
-            console.error("Manual texture setup failed:", e);
-          }
-        } else if (!mesh) {
-          console.warn("No mesh on videosphere — creating geometry manually");
-          try {
-            const THREE = (window as any).AFRAME.THREE;
-            const geometry = new THREE.SphereGeometry(500, 60, 40);
-            geometry.scale(-1, 1, 1);
-            const tex = new THREE.VideoTexture(vid);
-            tex.minFilter = THREE.LinearFilter;
-            tex.magFilter = THREE.LinearFilter;
-            const material = new THREE.MeshBasicMaterial({ map: tex });
-            const sphereMesh = new THREE.Mesh(geometry, material);
-            const iosRot = isIOSSafari();
-            sphereMesh.rotation.set(0, -Math.PI / 2, iosRot ? -Math.PI / 2 : 0);
-            sphere.setObject3D("mesh", sphereMesh);
-            setDebugInfo(d => ({ ...d, textureStatus: "manual-mesh" }));
-            console.log("Manual mesh created successfully");
-          } catch (e) {
-            console.error("Manual mesh creation failed:", e);
-          }
-        }
-      }
-
-      // Step 2: Force-start the render loop if scene didn't load
-      if (!sceneEl.hasLoaded) {
-        console.warn("A-Frame scene not loaded after 3s — force-starting render loop");
-        setDebugInfo(d => ({ ...d, state: d.state + " (force-start)" }));
-
-        try {
-          // Tell A-Frame the scene is loaded so play() can start the render loop
-          sceneEl.hasLoaded = true;
-
-          // CRITICAL: Manually load all child entities that were waiting for scene.hasLoaded.
-          // In A-Frame, entity.connectedCallback() only calls entity.load() if scene.hasLoaded
-          // is true. Since the scene was stuck, entities never loaded — their components
-          // (canvas-video-texture, look-controls, etc.) never called init().
-          // We must load them now before calling play().
-          const allChildren = sceneEl.querySelectorAll("*");
-          allChildren.forEach((el: any) => {
-            if (typeof el.load === "function" && !el.hasLoaded) {
-              try {
-                el.load();
-                console.log("Force-loaded entity:", el.tagName);
-              } catch (loadErr) {
-                console.warn("Failed to load entity:", el.tagName, loadErr);
-              }
-            }
-          });
-
-          sceneEl.emit("loaded");
-
-          // play() starts the render loop AND component ticking (look-controls, canvas-video-texture)
-          if (typeof sceneEl.play === "function") {
-            sceneEl.play();
-            console.log("A-Frame scene force-started successfully");
-          }
-
-          // Force renderer resize — during stalled init, the canvas may have 0×0 dimensions
-          if (typeof sceneEl.resize === "function") {
-            sceneEl.resize();
-          } else if (sceneEl.renderer && container) {
-            const w = container.clientWidth;
-            const h = container.clientHeight;
-            sceneEl.renderer.setSize(w, h);
-            if (sceneEl.camera) {
-              sceneEl.camera.aspect = w / h;
-              sceneEl.camera.updateProjectionMatrix();
-            }
-          }
-        } catch (e) {
-          console.error("Force-start via play() failed:", e);
-
-          // Last resort: manual render loop using A-Frame's renderer
-          if (sceneEl.renderer && sceneEl.object3D && sceneEl.camera) {
-            console.warn("Starting manual render loop");
-            let manualRafId: number;
-            const manualRender = () => {
-              if (!sceneRef.current) return;
-              manualRafId = requestAnimationFrame(manualRender);
-              try {
-                sceneEl.renderer.render(sceneEl.object3D, sceneEl.camera);
-              } catch (_) {
-                cancelAnimationFrame(manualRafId);
-              }
-            };
-            manualRender();
-          }
-        }
-      }
-    }, 3000);
-
+    // Scene interaction handlers
     let lastInteractionAt = 0;
     const handleSceneInteraction = () => {
       const now = Date.now();
       if (now - lastInteractionAt < 250) return;
       lastInteractionAt = now;
-
       const vid = videoRef.current;
-      if (!vid) return;
-
-      if (vid.paused) {
-        void attemptPlay(vid);
-      }
+      if (vid && vid.paused) void attemptPlay(vid);
     };
-
     scene.addEventListener("click", handleSceneInteraction);
     scene.addEventListener("touchend", handleSceneInteraction);
 
+    // Return cleanup function
     return () => {
-      clearTimeout(sceneLoadTimeout);
       scene.removeEventListener("click", handleSceneInteraction);
       scene.removeEventListener("touchend", handleSceneInteraction);
-
-      // Pause and clean up video
-      if (videoRef.current) {
-        videoRef.current.pause();
-        videoRef.current.removeAttribute("src");
-        videoRef.current.load();
-      }
-
-      videoRef.current = null;
-      videosphereRef.current = null;
-      sceneRef.current = null;
       if (scene.parentNode) {
         const sceneEl = scene as any;
         if (sceneEl.destroy) sceneEl.destroy();
         scene.remove();
       }
-      // Clean up any orphaned video element
+    };
+  };
+
+  // ─── MAIN SETUP EFFECT ──────────────────────────────────────────────
+  useEffect(() => {
+    if (!aframeLoaded || !containerRef.current) return;
+
+    setFatalError(null);
+    setIsPlaying(false);
+
+    const container = containerRef.current;
+    container.innerHTML = "";
+
+    const video = createVideoElement(container);
+
+    // Detect iOS version — use Three.js fallback for iOS < 15
+    // A-Frame 1.7.1 has deep incompatibilities with WebKit 605 (iOS 14.x)
+    // that prevent rendering even when scene/texture/video are all "OK".
+    const iosVersion = getIOSVersion();
+    const useThreeJs = iosVersion !== null && iosVersion < 15;
+
+    let cleanup: (() => void) | undefined;
+
+    if (useThreeJs) {
+      // For Three.js path, video goes in the container (not inside a-scene)
+      container.appendChild(video);
+      cleanup = setupThreeJsPlayer(container, video);
+    } else {
+      cleanup = setupAFramePlayer(container, video);
+    }
+
+    return () => {
+      cleanup?.();
+
+      // Clean up video
+      if (videoRef.current) {
+        videoRef.current.pause();
+        videoRef.current.removeAttribute("src");
+        videoRef.current.load();
+      }
+      videoRef.current = null;
+      videosphereRef.current = null;
+      sceneRef.current = null;
+
       const orphanedVideo = document.getElementById(videoIdRef.current);
       if (orphanedVideo?.parentNode) {
         orphanedVideo.remove();
@@ -554,15 +559,12 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
   const handlePlayClick = () => {
     const video = videoRef.current;
     if (!video) return;
-
-    // CRITICAL: Call attemptPlay synchronously from the click handler.
-    // Do NOT await anything before video.play() — iOS requires it in the gesture chain.
     void attemptPlay(video);
   };
 
   return (
     <div>
-      {/* Debug info box above video */}
+      {/* Debug info box */}
       <div
         style={{
           background: "#111",
@@ -579,7 +581,7 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
         <div><b>Muted:</b> {debugInfo.muted ? "yes" : "no"} | <b>Ready:</b> {debugInfo.readyState} | <b>Net:</b> {debugInfo.networkState}</div>
         <div><b>Texture:</b> {debugInfo.textureStatus} | <b>Scene:</b> {debugInfo.sceneLoaded ? "loaded" : "not loaded"}</div>
         <div><b>MaxTexSize:</b> {debugInfo.maxTexSize} | <b>TexFit:</b> {debugInfo.texSizeOk}</div>
-        <div><b>iOS:</b> {debugInfo.isIOS ? "yes" : "no"} | <b>Retries:</b> {debugInfo.retryCount}</div>
+        <div><b>iOS:</b> {debugInfo.isIOS ? "yes" : "no"} | <b>Renderer:</b> {debugInfo.renderer} | <b>Retries:</b> {debugInfo.retryCount}</div>
         <div style={{ fontSize: "10px", opacity: 0.7 }}><b>Src:</b> {debugInfo.videoSrc}...</div>
         <div style={{ fontSize: "10px", opacity: 0.7 }}><b>UA:</b> {debugInfo.browser}</div>
       </div>
