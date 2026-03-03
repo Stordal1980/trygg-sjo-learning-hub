@@ -1,4 +1,5 @@
 import { useRef, useEffect, useState } from "react";
+import * as THREE from "three";
 
 const isIOSSafari = (): boolean => {
   const ua = navigator.userAgent;
@@ -94,8 +95,18 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
     } catch (e) {}
   }, []);
 
-  // Load A-Frame dynamically (needed for Three.js even in fallback mode)
+  // Load A-Frame dynamically — but ONLY on modern browsers (iOS 15+, desktop, Android).
+  // On iOS < 15, we use standalone Three.js (already imported above) to avoid
+  // A-Frame consuming a WebGL context that we need for our own renderer.
+  const iosVersion = getIOSVersion();
+  const useThreeJsFallback = iosVersion !== null && iosVersion < 15;
+
   useEffect(() => {
+    if (useThreeJsFallback) {
+      // Skip A-Frame entirely — use standalone Three.js
+      setAframeLoaded(true); // Signal that we're ready to render
+      return;
+    }
     if ((window as any).AFRAME) {
       setAframeLoaded(true);
       return;
@@ -255,13 +266,8 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
 
   // ─── THREE.JS FALLBACK — for iOS < 15 where A-Frame fails ───────────
   const setupThreeJsPlayer = (container: HTMLElement, video: HTMLVideoElement) => {
-    const AFRAME = (window as any).AFRAME;
-    if (!AFRAME || !AFRAME.THREE) {
-      console.error("A-Frame or THREE not available for fallback renderer");
-      setFatalError("Kunne ikke starte 360-spilleren (Three.js ikke tilgjengelig).");
-      return () => {};
-    }
-    const THREE = AFRAME.THREE;
+    // Uses standalone Three.js (imported at top of file) — NOT A-Frame's bundled copy.
+    // This means A-Frame is never loaded, so no WebGL context is wasted on it.
     const w = container.clientWidth;
     const h = container.clientHeight;
 
@@ -366,9 +372,8 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
       }
 
       // Update camera orientation from lon/lat
-      const degToRad = (THREE.MathUtils || THREE.Math || { degToRad: (d: number) => d * Math.PI / 180 }).degToRad;
-      const phi = degToRad(90 - lat);
-      const theta = degToRad(lon);
+      const phi = THREE.MathUtils.degToRad(90 - lat);
+      const theta = THREE.MathUtils.degToRad(lon);
       const target = new THREE.Vector3(
         500 * Math.sin(phi) * Math.cos(theta),
         500 * Math.cos(phi),
@@ -556,13 +561,7 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
     try {
       const video = createVideoElement(container);
 
-      // Detect iOS version — use Three.js fallback for iOS < 15
-      // A-Frame 1.7.1 has deep incompatibilities with WebKit 605 (iOS 14.x)
-      // that prevent rendering even when scene/texture/video are all "OK".
-      const iosVersion = getIOSVersion();
-      const useThreeJs = iosVersion !== null && iosVersion < 15;
-
-      if (useThreeJs) {
+      if (useThreeJsFallback) {
         container.appendChild(video);
         cleanup = setupThreeJsPlayer(container, video);
       } else {
