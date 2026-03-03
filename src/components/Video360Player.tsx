@@ -1,5 +1,4 @@
 import { useRef, useEffect, useState } from "react";
-import * as THREE from "three";
 
 const isIOSSafari = (): boolean => {
   const ua = navigator.userAgent;
@@ -96,8 +95,8 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
   }, []);
 
   // Load A-Frame dynamically — but ONLY on modern browsers (iOS 15+, desktop, Android).
-  // On iOS < 15, we use standalone Three.js (already imported above) to avoid
-  // A-Frame consuming a WebGL context that we need for our own renderer.
+  // On iOS < 15, we use standalone Three.js (dynamically imported in setupThreeJsPlayer)
+  // to avoid A-Frame consuming a WebGL context that we need for our own renderer.
   const iosVersion = getIOSVersion();
   const useThreeJsFallback = iosVersion !== null && iosVersion < 15;
 
@@ -265,9 +264,11 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
   };
 
   // ─── THREE.JS FALLBACK — for iOS < 15 where A-Frame fails ───────────
-  const setupThreeJsPlayer = (container: HTMLElement, video: HTMLVideoElement) => {
-    // Uses standalone Three.js (imported at top of file) — NOT A-Frame's bundled copy.
-    // This means A-Frame is never loaded, so no WebGL context is wasted on it.
+  const setupThreeJsPlayer = async (container: HTMLElement, video: HTMLVideoElement) => {
+    // Dynamically import Three.js — NOT at the top of the file.
+    // This ensures Three.js is only loaded when needed, preventing its modern JS
+    // syntax from breaking the main bundle on very old browsers (iOS 13.3).
+    const THREE = await import("three");
     const w = container.clientWidth;
     const h = container.clientHeight;
 
@@ -557,22 +558,9 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
     container.innerHTML = "";
 
     let cleanup: (() => void) | undefined;
+    let cancelled = false;
 
-    try {
-      const video = createVideoElement(container);
-
-      if (useThreeJsFallback) {
-        container.appendChild(video);
-        cleanup = setupThreeJsPlayer(container, video);
-      } else {
-        cleanup = setupAFramePlayer(container, video);
-      }
-    } catch (err) {
-      console.error("360 player setup failed:", err);
-      setFatalError("360-spilleren kunne ikke starte. " + (err instanceof Error ? err.message : String(err)));
-    }
-
-    return () => {
+    const doCleanup = () => {
       try { cleanup?.(); } catch (_) {}
 
       if (videoRef.current) {
@@ -592,6 +580,41 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
           orphanedVideo.remove();
         }
       } catch (_) {}
+    };
+
+    try {
+      const video = createVideoElement(container);
+
+      if (useThreeJsFallback) {
+        container.appendChild(video);
+        // setupThreeJsPlayer is async (dynamic import of Three.js).
+        // We handle the promise and check if the effect was already cleaned up.
+        setupThreeJsPlayer(container, video)
+          .then((cleanupFn) => {
+            if (cancelled) {
+              // Effect already unmounted — clean up immediately
+              try { cleanupFn?.(); } catch (_) {}
+            } else {
+              cleanup = cleanupFn;
+            }
+          })
+          .catch((err) => {
+            if (!cancelled) {
+              console.error("Three.js setup failed:", err);
+              setFatalError("360-spilleren kunne ikke starte. " + (err instanceof Error ? err.message : String(err)));
+            }
+          });
+      } else {
+        cleanup = setupAFramePlayer(container, video);
+      }
+    } catch (err) {
+      console.error("360 player setup failed:", err);
+      setFatalError("360-spilleren kunne ikke starte. " + (err instanceof Error ? err.message : String(err)));
+    }
+
+    return () => {
+      cancelled = true;
+      doCleanup();
     };
   }, [aframeLoaded, videoUrl]);
 
