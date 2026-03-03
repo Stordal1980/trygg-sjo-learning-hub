@@ -82,8 +82,14 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
       const c = document.createElement("canvas");
       const gl = c.getContext("webgl") || c.getContext("experimental-webgl");
       if (gl) {
-        const max = (gl as WebGLRenderingContext).getParameter((gl as WebGLRenderingContext).MAX_TEXTURE_SIZE);
+        const glCtx = gl as WebGLRenderingContext;
+        const max = glCtx.getParameter(glCtx.MAX_TEXTURE_SIZE);
         setDebugInfo((d) => ({ ...d, maxTexSize: max }));
+        // CRITICAL: Dispose this WebGL context immediately.
+        // iOS has a strict limit on simultaneous WebGL contexts (~8).
+        // If we don't release it, the 360 renderer can't create its own.
+        const loseCtx = glCtx.getExtension("WEBGL_lose_context");
+        if (loseCtx) loseCtx.loseContext();
       }
     } catch (e) {}
   }, []);
@@ -262,8 +268,23 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
     setDebugInfo(d => ({ ...d, renderer: "three.js", sceneLoaded: true }));
     console.log("Using Three.js fallback renderer");
 
-    // Create WebGL renderer
-    const renderer = new THREE.WebGLRenderer({ antialias: false, alpha: false });
+    // Create WebGL renderer — may fail on iOS if too many contexts are active
+    let renderer: any;
+    try {
+      renderer = new THREE.WebGLRenderer({ antialias: false, alpha: false });
+    } catch (webglErr) {
+      console.error("WebGL context creation failed:", webglErr);
+      // Fallback: show video as a regular flat player (not 360, but watchable)
+      setDebugInfo(d => ({ ...d, renderer: "flat-video" }));
+      video.style.display = "";
+      video.style.width = "100%";
+      video.style.height = "100%";
+      video.style.objectFit = "cover";
+      video.removeAttribute("crossorigin");
+      video.controls = true;
+      container.appendChild(video);
+      return () => {};
+    }
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.setSize(w, h);
     container.appendChild(renderer.domElement);
