@@ -373,7 +373,7 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
     videosphereRef.current = videosphere;
 
     const camera = document.createElement("a-camera");
-    camera.setAttribute("look-controls", "reverseMouseDrag: true");
+    camera.setAttribute("look-controls", "magicWindowTrackingEnabled: false; reverseMouseDrag: true");
     camera.setAttribute("wasd-controls", "enabled: false");
     scene.appendChild(camera);
 
