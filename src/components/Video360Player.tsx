@@ -94,7 +94,12 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
       setAframeLoaded(true);
       return;
     }
-    import("aframe").then(() => setAframeLoaded(true));
+    import("aframe")
+      .then(() => setAframeLoaded(true))
+      .catch((err) => {
+        console.error("Failed to load A-Frame:", err);
+        setFatalError("Kunne ikke laste 360-spilleren. Pr\u00f8v \u00e5 oppdatere siden.");
+      });
   }, []);
 
   // Debug interval
@@ -244,7 +249,13 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
 
   // ─── THREE.JS FALLBACK — for iOS < 15 where A-Frame fails ───────────
   const setupThreeJsPlayer = (container: HTMLElement, video: HTMLVideoElement) => {
-    const THREE = (window as any).AFRAME.THREE;
+    const AFRAME = (window as any).AFRAME;
+    if (!AFRAME || !AFRAME.THREE) {
+      console.error("A-Frame or THREE not available for fallback renderer");
+      setFatalError("Kunne ikke starte 360-spilleren (Three.js ikke tilgjengelig).");
+      return () => {};
+    }
+    const THREE = AFRAME.THREE;
     const w = container.clientWidth;
     const h = container.clientHeight;
 
@@ -334,8 +345,9 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
       }
 
       // Update camera orientation from lon/lat
-      const phi = THREE.MathUtils.degToRad(90 - lat);
-      const theta = THREE.MathUtils.degToRad(lon);
+      const degToRad = (THREE.MathUtils || THREE.Math || { degToRad: (d: number) => d * Math.PI / 180 }).degToRad;
+      const phi = degToRad(90 - lat);
+      const theta = degToRad(lon);
       const target = new THREE.Vector3(
         500 * Math.sin(phi) * Math.cos(theta),
         500 * Math.cos(phi),
@@ -518,41 +530,48 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
     const container = containerRef.current;
     container.innerHTML = "";
 
-    const video = createVideoElement(container);
-
-    // Detect iOS version — use Three.js fallback for iOS < 15
-    // A-Frame 1.7.1 has deep incompatibilities with WebKit 605 (iOS 14.x)
-    // that prevent rendering even when scene/texture/video are all "OK".
-    const iosVersion = getIOSVersion();
-    const useThreeJs = iosVersion !== null && iosVersion < 15;
-
     let cleanup: (() => void) | undefined;
 
-    if (useThreeJs) {
-      // For Three.js path, video goes in the container (not inside a-scene)
-      container.appendChild(video);
-      cleanup = setupThreeJsPlayer(container, video);
-    } else {
-      cleanup = setupAFramePlayer(container, video);
+    try {
+      const video = createVideoElement(container);
+
+      // Detect iOS version — use Three.js fallback for iOS < 15
+      // A-Frame 1.7.1 has deep incompatibilities with WebKit 605 (iOS 14.x)
+      // that prevent rendering even when scene/texture/video are all "OK".
+      const iosVersion = getIOSVersion();
+      const useThreeJs = iosVersion !== null && iosVersion < 15;
+
+      if (useThreeJs) {
+        container.appendChild(video);
+        cleanup = setupThreeJsPlayer(container, video);
+      } else {
+        cleanup = setupAFramePlayer(container, video);
+      }
+    } catch (err) {
+      console.error("360 player setup failed:", err);
+      setFatalError("360-spilleren kunne ikke starte. " + (err instanceof Error ? err.message : String(err)));
     }
 
     return () => {
-      cleanup?.();
+      try { cleanup?.(); } catch (_) {}
 
-      // Clean up video
       if (videoRef.current) {
-        videoRef.current.pause();
-        videoRef.current.removeAttribute("src");
-        videoRef.current.load();
+        try {
+          videoRef.current.pause();
+          videoRef.current.removeAttribute("src");
+          videoRef.current.load();
+        } catch (_) {}
       }
       videoRef.current = null;
       videosphereRef.current = null;
       sceneRef.current = null;
 
-      const orphanedVideo = document.getElementById(videoIdRef.current);
-      if (orphanedVideo?.parentNode) {
-        orphanedVideo.remove();
-      }
+      try {
+        const orphanedVideo = document.getElementById(videoIdRef.current);
+        if (orphanedVideo?.parentNode) {
+          orphanedVideo.remove();
+        }
+      } catch (_) {}
     };
   }, [aframeLoaded, videoUrl]);
 
