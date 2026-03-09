@@ -262,11 +262,6 @@ const Dashboard = () => {
           )}
         </section>
 
-        {hasAnyAccess && user && (
-          <section className="fade-in mt-8" style={{ animationDelay: "0.25s" }}>
-            <ExamBookingCard userId={user.id} hasAccess={hasAnyAccess} />
-          </section>
-        )}
 
         <section className="fade-in mt-8" style={{ animationDelay: "0.3s" }}>
           <BoatInstructorChat />
