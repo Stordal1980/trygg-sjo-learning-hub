@@ -9,6 +9,7 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Anchor, BookOpen, LogOut, Award, Menu, Settings, Lock } from "lucide-react";
 import type { User } from "@supabase/supabase-js";
 import { BoatInstructorChat } from "@/components/BoatInstructorChat";
+import { ExamBookingCard } from "@/components/ExamBookingCard";
 
 interface Course {
   id: string;
@@ -256,6 +257,12 @@ const Dashboard = () => {
             </div>
           )}
         </section>
+
+        {hasAnyAccess && user && (
+          <section className="fade-in mt-8" style={{ animationDelay: "0.25s" }}>
+            <ExamBookingCard userId={user.id} hasAccess={hasAnyAccess} />
+          </section>
+        )}
 
         <section className="fade-in mt-8" style={{ animationDelay: "0.3s" }}>
           <BoatInstructorChat />

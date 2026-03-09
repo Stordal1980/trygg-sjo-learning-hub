@@ -160,6 +160,90 @@ export type Database = {
         }
         Relationships: []
       }
+      exam_bookings: {
+        Row: {
+          admin_note: string | null
+          created_at: string
+          full_name: string
+          id: string
+          slot_id: string
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          admin_note?: string | null
+          created_at?: string
+          full_name: string
+          id?: string
+          slot_id: string
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          admin_note?: string | null
+          created_at?: string
+          full_name?: string
+          id?: string
+          slot_id?: string
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "exam_bookings_slot_id_fkey"
+            columns: ["slot_id"]
+            isOneToOne: false
+            referencedRelation: "exam_slots"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "exam_bookings_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      exam_slots: {
+        Row: {
+          created_at: string
+          current_bookings: number
+          date: string
+          end_time: string
+          id: string
+          is_active: boolean
+          max_bookings: number
+          start_time: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          current_bookings?: number
+          date: string
+          end_time: string
+          id?: string
+          is_active?: boolean
+          max_bookings?: number
+          start_time: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          current_bookings?: number
+          date?: string
+          end_time?: string
+          id?: string
+          is_active?: boolean
+          max_bookings?: number
+          start_time?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       module_progress: {
         Row: {
           completed: boolean
