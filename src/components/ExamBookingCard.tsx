@@ -268,14 +268,14 @@ export function ExamBookingCard({ userId, hasAccess, compact }: ExamBookingCardP
     return (
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogTrigger asChild>
-          <Card className="border-2 border-emerald-500/30 bg-emerald-50/50 dark:bg-emerald-950/20 cursor-pointer hover:shadow-md transition-shadow">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Book eksamen</CardTitle>
-              <CalendarCheck className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+          <Card className="py-2 border-2 border-emerald-500/30 bg-emerald-50/50 dark:bg-emerald-950/20 cursor-pointer hover:shadow-md transition-shadow">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 pt-3 px-4">
+              <CardTitle className="text-xs font-medium text-emerald-700 dark:text-emerald-400">Book eksamen</CardTitle>
+              <CalendarCheck className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
             </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{confirmedCount}</div>
-              <p className="text-xs text-muted-foreground">
+            <CardContent className="px-4 pb-3">
+              <div className="text-3xl font-extrabold tracking-tight">{confirmedCount}</div>
+              <p className="text-xs text-muted-foreground mt-0.5">
                 {pendingCount > 0 ? `${pendingCount} venter på svar` : "Trykk for å booke"}
               </p>
             </CardContent>
