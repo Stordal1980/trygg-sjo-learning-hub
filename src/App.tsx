@@ -14,6 +14,7 @@ import AdminModuleEdit from "./pages/admin/AdminModuleEdit";
 import AdminPricing from "./pages/admin/AdminPricing";
 import AdminDiscounts from "./pages/admin/AdminDiscounts";
 import Checkout from "./pages/Checkout";
+import PaymentSuccess from "./pages/PaymentSuccess";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();

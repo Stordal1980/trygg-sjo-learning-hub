@@ -2,3 +2,9 @@ project_id = "tddmaaysomoedmjlufww"
 
 [functions.boat-instructor-chat]
 verify_jwt = false
+
+[functions.create-payment]
+verify_jwt = false
+
+[functions.verify-payment]
+verify_jwt = false
