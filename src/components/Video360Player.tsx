@@ -626,27 +626,7 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
 
   return (
     <div>
-      {/* Debug info box */}
-      <div
-        style={{
-          background: "#111",
-          color: "#0f0",
-          fontFamily: "monospace",
-          fontSize: "12px",
-          padding: "10px 12px",
-          borderRadius: "6px",
-          lineHeight: 1.6,
-          marginBottom: "8px",
-        }}
-      >
-        <div><b>State:</b> {debugInfo.state} | <b>Time:</b> {debugInfo.time.toFixed(1)}s | <b>Dim:</b> {debugInfo.dimensions}</div>
-        <div><b>Muted:</b> {debugInfo.muted ? "yes" : "no"} | <b>Ready:</b> {debugInfo.readyState} | <b>Net:</b> {debugInfo.networkState}</div>
-        <div><b>Texture:</b> {debugInfo.textureStatus} | <b>Scene:</b> {debugInfo.sceneLoaded ? "loaded" : "not loaded"}</div>
-        <div><b>MaxTexSize:</b> {debugInfo.maxTexSize} | <b>TexFit:</b> {debugInfo.texSizeOk}</div>
-        <div><b>iOS:</b> {debugInfo.isIOS ? "yes" : "no"} | <b>Renderer:</b> {debugInfo.renderer} | <b>Retries:</b> {debugInfo.retryCount}</div>
-        <div style={{ fontSize: "10px", opacity: 0.7 }}><b>Src:</b> {debugInfo.videoSrc}...</div>
-        <div style={{ fontSize: "10px", opacity: 0.7 }}><b>UA:</b> {debugInfo.browser}</div>
-      </div>
+      {/* Debug info box - disabled for now */}
       {fatalError ? (
         <div className="w-full h-[400px] rounded-lg border border-border bg-muted flex flex-col items-center justify-center gap-3 p-4 text-center">
           <p className="text-sm text-foreground">{fatalError}</p>
