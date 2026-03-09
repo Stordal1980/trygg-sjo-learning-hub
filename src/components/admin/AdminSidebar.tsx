@@ -18,6 +18,7 @@ const menuItems = [
   { title: "Kurs", url: "/admin/courses", icon: BookOpen },
   { title: "Priser", url: "/admin/pricing", icon: DollarSign },
   { title: "Rabattkoder", url: "/admin/discounts", icon: Ticket },
+  { title: "Eksamen", url: "/admin/exams", icon: CalendarCheck },
   { title: "Innstillinger", url: "/admin/settings", icon: Settings },
 ];
 
