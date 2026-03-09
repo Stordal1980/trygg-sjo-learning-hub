@@ -173,41 +173,37 @@ const Dashboard = () => {
           </p>
         </div>
 
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4 mb-12 fade-in" style={{ animationDelay: "0.1s" }}>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Mine kurs</CardTitle>
-              <BookOpen className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 mb-12 fade-in" style={{ animationDelay: "0.1s" }}>
+          <Card className="py-2">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 pt-3 px-4">
+              <CardTitle className="text-xs font-medium text-muted-foreground">Mine kurs</CardTitle>
+              <BookOpen className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
             </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{enrollments.length}</div>
-              <p className="text-xs text-muted-foreground">
-                Totalt antall påmeldte kurs
-              </p>
+            <CardContent className="px-4 pb-3">
+              <div className="text-3xl font-extrabold tracking-tight">{enrollments.length}</div>
+              <p className="text-xs text-muted-foreground mt-0.5">påmeldte kurs</p>
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Fremgang</CardTitle>
-              <Award className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+          <Card className="py-2">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 pt-3 px-4">
+              <CardTitle className="text-xs font-medium text-muted-foreground">Fremgang</CardTitle>
+              <Award className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
             </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">0%</div>
-              <Progress value={0} className="mt-2" aria-label="Kursfremgang" />
+            <CardContent className="px-4 pb-3">
+              <div className="text-3xl font-extrabold tracking-tight">0%</div>
+              <Progress value={0} className="mt-1.5 h-1.5" aria-label="Kursfremgang" />
             </CardContent>
           </Card>
 
-          <Card className="bg-accent text-accent-foreground">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Tilgjengelige kurs</CardTitle>
-              <BookOpen className="h-4 w-4" aria-hidden="true" />
+          <Card className="py-2 bg-accent text-accent-foreground">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 pt-3 px-4">
+              <CardTitle className="text-xs font-medium opacity-80">Tilgjengelige kurs</CardTitle>
+              <BookOpen className="h-3.5 w-3.5 opacity-70" aria-hidden="true" />
             </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{courses.length}</div>
-              <p className="text-xs opacity-90">
-                Klar for å utforske
-              </p>
+            <CardContent className="px-4 pb-3">
+              <div className="text-3xl font-extrabold tracking-tight">{courses.length}</div>
+              <p className="text-xs opacity-80 mt-0.5">Klar for å utforske</p>
             </CardContent>
           </Card>
 

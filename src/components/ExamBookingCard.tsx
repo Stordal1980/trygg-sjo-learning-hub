@@ -6,10 +6,12 @@ import { Calendar } from "@/components/ui/calendar";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useToast } from "@/hooks/use-toast";
-import { CalendarCheck, Clock, Loader2 } from "lucide-react";
+import { CalendarCheck, CalendarIcon, Clock, Loader2 } from "lucide-react";
 import { format } from "date-fns";
 import { nb } from "date-fns/locale";
+import { cn } from "@/lib/utils";
 
 interface ExamSlot {
   id: string;
