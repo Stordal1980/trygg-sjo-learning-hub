@@ -14,6 +14,7 @@ import AdminModuleEdit from "./pages/admin/AdminModuleEdit";
 import AdminPricing from "./pages/admin/AdminPricing";
 import AdminDiscounts from "./pages/admin/AdminDiscounts";
 import Checkout from "./pages/Checkout";
+import PaymentSuccess from "./pages/PaymentSuccess";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -36,6 +37,7 @@ const App = () => (
           <Route path="/admin/pricing" element={<AdminPricing />} />
           <Route path="/admin/discounts" element={<AdminDiscounts />} />
           <Route path="/checkout" element={<Checkout />} />
+          <Route path="/payment-success" element={<PaymentSuccess />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>

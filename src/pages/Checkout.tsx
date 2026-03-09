@@ -1,180 +1,38 @@
-import { useState, useEffect } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2 } from "lucide-react";
+import { Loader2, Anchor, CheckCircle2 } from "lucide-react";
 
 export default function Checkout() {
-  const [searchParams] = useSearchParams();
-  const courseId = searchParams.get("courseId");
-  const isBundle = searchParams.get("bundle") === "true";
-  
-  const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
-  const [price, setPrice] = useState<number>(0);
-  const [courseName, setCourseName] = useState<string>("");
-  const [discountCode, setDiscountCode] = useState("");
-  const [discount, setDiscount] = useState(0);
-  const [finalPrice, setFinalPrice] = useState(0);
-  
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  useEffect(() => {
-    fetchPriceInfo();
-  }, [courseId, isBundle]);
-
-  useEffect(() => {
-    setFinalPrice(Math.max(0, price - (price * discount / 100)));
-  }, [price, discount]);
-
-  const fetchPriceInfo = async () => {
-    try {
-      if (isBundle) {
-        const { data, error } = await supabase
-          .from("bundle_pricing")
-          .select("*")
-          .eq("is_active", true)
-          .single();
-        
-        if (error) throw error;
-        setPrice(data.price_nok);
-        setCourseName(data.name);
-      } else if (courseId) {
-        const { data, error } = await supabase
-          .from("courses")
-          .select("*")
-          .eq("id", courseId)
-          .single();
-        
-        if (error) throw error;
-        setPrice(data.price_nok);
-        setCourseName(data.title);
-      }
-    } catch (error) {
-      console.error("Error fetching price:", error);
-      toast({
-        title: "Feil",
-        description: "Kunne ikke hente prisinformasjon",
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const applyDiscountCode = async () => {
-    if (!discountCode.trim()) return;
-
-    try {
-      // Use secure RPC function to validate code without exposing all codes
-      const { data, error } = await supabase
-        .rpc('validate_discount_code', { 
-          code_to_check: discountCode.trim().toUpperCase() 
-        });
-
-      if (error) {
-        console.error("Error validating discount code:", error);
-        toast({
-          title: "Feil",
-          description: "Kunne ikke validere rabattkode",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      if (!data || data.length === 0) {
-        toast({
-          title: "Ugyldig rabattkode",
-          description: "Rabattkoden finnes ikke, er utløpt eller er brukt opp",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      const validCode = data[0];
-      setDiscount(validCode.discount_percent);
-      toast({
-        title: "Rabattkode aktivert!",
-        description: `${validCode.discount_percent}% rabatt`,
-      });
-    } catch (error) {
-      console.error("Error applying discount:", error);
-    }
-  };
-
-  const processPayment = async () => {
+  const handlePayment = async () => {
     setProcessing(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("Ikke innlogget");
-
-      // Dummy betaling - simpler bare en vellykket betaling
-      const { data: payment, error: paymentError } = await supabase
-        .from("payments")
-        .insert({
-          user_id: user.id,
-          amount_nok: price,
-          discount_amount_nok: price - finalPrice,
-          final_amount_nok: finalPrice,
-          payment_method: "dummy",
-          status: "completed",
-          course_id: isBundle ? null : courseId,
-          is_bundle: isBundle,
-        })
-        .select()
-        .single();
-
-      if (paymentError) throw paymentError;
-
-      // Legg til enrollment(s)
-      if (isBundle) {
-        // Gi tilgang til alle publiserte kurs
-        const { data: courses } = await supabase
-          .from("courses")
-          .select("id")
-          .eq("is_published", true);
-
-        if (courses) {
-          const enrollments = courses.map(course => ({
-            user_id: user.id,
-            course_id: course.id,
-          }));
-          
-          await supabase.from("user_enrollments").insert(enrollments);
-        }
-      } else if (courseId) {
-        // Gi tilgang til alle publiserte kurs (også ved enkelt-kurskjøp)
-        const { data: courses } = await supabase
-          .from("courses")
-          .select("id")
-          .eq("is_published", true);
-
-        if (courses) {
-          const enrollments = courses.map(course => ({
-            user_id: user.id,
-            course_id: course.id,
-          }));
-          
-          await supabase.from("user_enrollments").insert(enrollments);
-        }
+      if (!user) {
+        navigate("/auth");
+        return;
       }
 
-      toast({
-        title: "Betaling vellykket!",
-        description: "Du har nå tilgang til kurset/kursene",
-      });
+      const { data, error } = await supabase.functions.invoke("create-payment");
 
-      navigate("/dashboard");
-    } catch (error) {
+      if (error) throw error;
+      if (data?.url) {
+        window.location.href = data.url;
+      } else {
+        throw new Error("No checkout URL returned");
+      }
+    } catch (error: any) {
       console.error("Payment error:", error);
       toast({
         title: "Betalingsfeil",
-        description: "Noe gikk galt under betalingen",
+        description: "Noe gikk galt. Prøv igjen.",
         variant: "destructive",
       });
     } finally {
@@ -182,76 +40,57 @@ export default function Checkout() {
     }
   };
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin" />
-      </div>
-    );
-  }
+  const features = [
+    "Tilgang til alle publiserte kurs",
+    "360° interaktive videoer",
+    "AI-drevet båtinstruktør",
+    "Livstidstilgang – betal kun én gang",
+  ];
 
   return (
     <div className="min-h-screen bg-background py-12 px-4">
-      <div className="max-w-2xl mx-auto">
+      <div className="max-w-lg mx-auto">
+        <div className="text-center mb-8">
+          <Anchor className="h-12 w-12 text-primary mx-auto mb-4" />
+          <h1 className="text-3xl font-bold">Trygg Sjø</h1>
+          <p className="text-muted-foreground mt-2">Få tilgang til alle kurs</p>
+        </div>
+
         <Card>
           <CardHeader>
-            <CardTitle>Kasse</CardTitle>
-            <CardDescription>
-              Fullfør betalingen for å få tilgang
-            </CardDescription>
+            <CardTitle>Full tilgang</CardTitle>
+            <CardDescription>Livstidstilgang til hele plattformen</CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
-            <div className="space-y-2">
-              <h3 className="font-semibold text-lg">{courseName}</h3>
-              <p className="text-2xl font-bold">{price} NOK</p>
+            <div className="text-center">
+              <span className="text-4xl font-bold">999 NOK</span>
+              <p className="text-sm text-muted-foreground mt-1">Engangsbetaling</p>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="discount">Rabattkode (valgfritt)</Label>
-              <div className="flex gap-2">
-                <Input
-                  id="discount"
-                  placeholder="Skriv inn rabattkode"
-                  value={discountCode}
-                  onChange={(e) => setDiscountCode(e.target.value.toUpperCase())}
-                />
-                <Button onClick={applyDiscountCode} variant="outline">
-                  Bruk
-                </Button>
-              </div>
-            </div>
+            <ul className="space-y-3">
+              {features.map((feature, i) => (
+                <li key={i} className="flex items-center gap-2">
+                  <CheckCircle2 className="h-5 w-5 text-primary shrink-0" />
+                  <span className="text-sm">{feature}</span>
+                </li>
+              ))}
+            </ul>
 
-            {discount > 0 && (
-              <div className="bg-muted p-4 rounded-lg space-y-1">
-                <p className="text-sm">Rabatt ({discount}%): -{price - finalPrice} NOK</p>
-                <p className="text-lg font-bold">Totalt: {finalPrice} NOK</p>
-              </div>
-            )}
-
-            <div className="border-t pt-6">
-              <div className="bg-blue-50 dark:bg-blue-950 p-4 rounded-lg mb-4">
-                <p className="text-sm text-blue-900 dark:text-blue-100">
-                  <strong>Test-modus:</strong> Dette er en simulert betaling. 
-                  Trykk på "Fullfør betaling" for å få umiddelbar tilgang.
-                </p>
-              </div>
-              
-              <Button 
-                onClick={processPayment} 
-                disabled={processing}
-                className="w-full"
-                size="lg"
-              >
-                {processing ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Behandler...
-                  </>
-                ) : (
-                  "Fullfør betaling (TEST)"
-                )}
-              </Button>
-            </div>
+            <Button
+              onClick={handlePayment}
+              disabled={processing}
+              className="w-full"
+              size="lg"
+            >
+              {processing ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Behandler...
+                </>
+              ) : (
+                "Betal nå"
+              )}
+            </Button>
           </CardContent>
         </Card>
       </div>
