@@ -5,8 +5,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Calendar } from "@/components/ui/calendar";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { CalendarCheck, Clock, Loader2, CheckCircle2 } from "lucide-react";
+import { CalendarCheck, Clock, Loader2 } from "lucide-react";
 import { format } from "date-fns";
 import { nb } from "date-fns/locale";
 
@@ -35,9 +36,10 @@ interface ExamBooking {
 interface ExamBookingCardProps {
   userId: string;
   hasAccess: boolean;
+  compact?: boolean;
 }
 
-export function ExamBookingCard({ userId, hasAccess }: ExamBookingCardProps) {
+export function ExamBookingCard({ userId, hasAccess, compact }: ExamBookingCardProps) {
   const [selectedDate, setSelectedDate] = useState<Date | undefined>();
   const [slots, setSlots] = useState<ExamSlot[]>([]);
   const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
@@ -45,6 +47,7 @@ export function ExamBookingCard({ userId, hasAccess }: ExamBookingCardProps) {
   const [submitting, setSubmitting] = useState(false);
   const [myBookings, setMyBookings] = useState<ExamBooking[]>([]);
   const [availableDates, setAvailableDates] = useState<Date[]>([]);
+  const [dialogOpen, setDialogOpen] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -118,6 +121,7 @@ export function ExamBookingCard({ userId, hasAccess }: ExamBookingCardProps) {
       setSelectedSlot(null);
       setFullName("");
       setSelectedDate(undefined);
+      setDialogOpen(false);
       fetchMyBookings();
       fetchAvailableDates();
     } catch (error: any) {
@@ -148,6 +152,124 @@ export function ExamBookingCard({ userId, hasAccess }: ExamBookingCardProps) {
     );
   };
 
+  const pendingCount = myBookings.filter((b) => b.status === "pending").length;
+  const confirmedCount = myBookings.filter((b) => b.status === "confirmed").length;
+
+  const bookingForm = (
+    <div className="space-y-4">
+      <Calendar
+        mode="single"
+        selected={selectedDate}
+        onSelect={setSelectedDate}
+        locale={nb}
+        disabled={(date) => date < new Date() || !isDateAvailable(date)}
+        className="rounded-md border pointer-events-auto"
+        modifiers={{ available: availableDates }}
+        modifiersClassNames={{
+          available: "bg-emerald-100 dark:bg-emerald-900/40 font-bold",
+        }}
+      />
+
+      {selectedDate && slots.length > 0 && (
+        <div className="space-y-2">
+          <Label>Velg tidspunkt</Label>
+          <div className="grid grid-cols-2 gap-2">
+            {slots
+              .filter((s) => s.current_bookings < s.max_bookings)
+              .map((slot) => (
+                <Button
+                  key={slot.id}
+                  variant={selectedSlot === slot.id ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setSelectedSlot(slot.id)}
+                  className="justify-start"
+                >
+                  <Clock className="h-4 w-4 mr-2" />
+                  {slot.start_time.slice(0, 5)} – {slot.end_time.slice(0, 5)}
+                </Button>
+              ))}
+          </div>
+          {slots.filter((s) => s.current_bookings < s.max_bookings).length === 0 && (
+            <p className="text-sm text-muted-foreground">Ingen ledige tider denne dagen</p>
+          )}
+        </div>
+      )}
+
+      {selectedDate && slots.length === 0 && (
+        <p className="text-sm text-muted-foreground">Ingen tider tilgjengelig denne dagen</p>
+      )}
+
+      {selectedSlot && (
+        <div className="space-y-3 pt-2 border-t">
+          <div>
+            <Label htmlFor="exam-name">Fullt navn</Label>
+            <Input
+              id="exam-name"
+              placeholder="Skriv inn ditt fulle navn"
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+              maxLength={100}
+            />
+          </div>
+          <Button
+            onClick={handleSubmit}
+            disabled={submitting}
+            className="w-full bg-emerald-600 hover:bg-emerald-700 text-white"
+          >
+            {submitting ? (
+              <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Sender...</>
+            ) : (
+              "Send forespørsel"
+            )}
+          </Button>
+        </div>
+      )}
+
+      {myBookings.length > 0 && (
+        <div className="pt-4 border-t space-y-2">
+          <h4 className="font-medium text-sm">Mine bookinger</h4>
+          {myBookings.map((b) => (
+            <div key={b.id} className="text-sm p-2 rounded bg-background border">
+              <div className="flex justify-between">
+                <span>
+                  {b.exam_slots?.date} kl. {b.exam_slots?.start_time?.slice(0, 5)}
+                </span>
+                <span>{statusLabel(b.status)}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
+  if (compact) {
+    return (
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogTrigger asChild>
+          <Card className="border-2 border-emerald-500/30 bg-emerald-50/50 dark:bg-emerald-950/20 cursor-pointer hover:shadow-md transition-shadow">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Book eksamen</CardTitle>
+              <CalendarCheck className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{confirmedCount}</div>
+              <p className="text-xs text-muted-foreground">
+                {pendingCount > 0 ? `${pendingCount} venter på svar` : "Trykk for å booke"}
+              </p>
+            </CardContent>
+          </Card>
+        </DialogTrigger>
+        <DialogContent className="max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Book eksamen</DialogTitle>
+          </DialogHeader>
+          {bookingForm}
+        </DialogContent>
+      </Dialog>
+    );
+  }
+
   return (
     <Card className="border-2 border-emerald-500/30 bg-emerald-50/50 dark:bg-emerald-950/20">
       <CardHeader className="flex flex-row items-center gap-3">
@@ -157,91 +279,7 @@ export function ExamBookingCard({ userId, hasAccess }: ExamBookingCardProps) {
           <p className="text-sm text-muted-foreground">Velg dato og tid for din eksamen</p>
         </div>
       </CardHeader>
-      <CardContent className="space-y-4">
-        <Calendar
-          mode="single"
-          selected={selectedDate}
-          onSelect={setSelectedDate}
-          locale={nb}
-          disabled={(date) => date < new Date() || !isDateAvailable(date)}
-          className="rounded-md border pointer-events-auto"
-          modifiers={{ available: availableDates }}
-          modifiersClassNames={{
-            available: "bg-emerald-100 dark:bg-emerald-900/40 font-bold",
-          }}
-        />
-
-        {selectedDate && slots.length > 0 && (
-          <div className="space-y-2">
-            <Label>Velg tidspunkt</Label>
-            <div className="grid grid-cols-2 gap-2">
-              {slots
-                .filter((s) => s.current_bookings < s.max_bookings)
-                .map((slot) => (
-                  <Button
-                    key={slot.id}
-                    variant={selectedSlot === slot.id ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setSelectedSlot(slot.id)}
-                    className="justify-start"
-                  >
-                    <Clock className="h-4 w-4 mr-2" />
-                    {slot.start_time.slice(0, 5)} – {slot.end_time.slice(0, 5)}
-                  </Button>
-                ))}
-            </div>
-            {slots.filter((s) => s.current_bookings < s.max_bookings).length === 0 && (
-              <p className="text-sm text-muted-foreground">Ingen ledige tider denne dagen</p>
-            )}
-          </div>
-        )}
-
-        {selectedDate && slots.length === 0 && (
-          <p className="text-sm text-muted-foreground">Ingen tider tilgjengelig denne dagen</p>
-        )}
-
-        {selectedSlot && (
-          <div className="space-y-3 pt-2 border-t">
-            <div>
-              <Label htmlFor="exam-name">Fullt navn</Label>
-              <Input
-                id="exam-name"
-                placeholder="Skriv inn ditt fulle navn"
-                value={fullName}
-                onChange={(e) => setFullName(e.target.value)}
-                maxLength={100}
-              />
-            </div>
-            <Button
-              onClick={handleSubmit}
-              disabled={submitting}
-              className="w-full bg-emerald-600 hover:bg-emerald-700 text-white"
-            >
-              {submitting ? (
-                <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Sender...</>
-              ) : (
-                "Send forespørsel"
-              )}
-            </Button>
-          </div>
-        )}
-
-        {myBookings.length > 0 && (
-          <div className="pt-4 border-t space-y-2">
-            <h4 className="font-medium text-sm">Mine bookinger</h4>
-            {myBookings.map((b) => (
-              <div key={b.id} className="text-sm p-2 rounded bg-background border">
-                <div className="flex justify-between">
-                  <span>
-                    {b.exam_slots?.date} kl. {b.exam_slots?.start_time?.slice(0, 5)}
-                  </span>
-                  <span>{statusLabel(b.status)}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </CardContent>
+      <CardContent>{bookingForm}</CardContent>
     </Card>
   );
 }
