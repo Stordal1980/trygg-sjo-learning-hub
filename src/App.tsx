@@ -13,6 +13,7 @@ import AdminCourseEdit from "./pages/admin/AdminCourseEdit";
 import AdminModuleEdit from "./pages/admin/AdminModuleEdit";
 import AdminPricing from "./pages/admin/AdminPricing";
 import AdminDiscounts from "./pages/admin/AdminDiscounts";
+import AdminExams from "./pages/admin/AdminExams";
 import Checkout from "./pages/Checkout";
 import PaymentSuccess from "./pages/PaymentSuccess";
 import NotFound from "./pages/NotFound";
