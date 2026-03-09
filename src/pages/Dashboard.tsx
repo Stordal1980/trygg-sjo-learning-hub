@@ -173,7 +173,7 @@ const Dashboard = () => {
           </p>
         </div>
 
-        <div className="grid gap-6 md:grid-cols-3 mb-12 fade-in" style={{ animationDelay: "0.1s" }}>
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4 mb-12 fade-in" style={{ animationDelay: "0.1s" }}>
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Mine kurs</CardTitle>
@@ -210,6 +210,10 @@ const Dashboard = () => {
               </p>
             </CardContent>
           </Card>
+
+          {hasAnyAccess && user && (
+            <ExamBookingCard userId={user.id} hasAccess={hasAnyAccess} compact />
+          )}
         </div>
 
         <section className="fade-in" style={{ animationDelay: "0.2s" }}>
