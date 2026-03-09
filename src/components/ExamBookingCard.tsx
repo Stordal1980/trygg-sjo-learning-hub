@@ -159,18 +159,37 @@ export function ExamBookingCard({ userId, hasAccess, compact }: ExamBookingCardP
 
   const bookingForm = (
     <div className="space-y-4">
-      <Calendar
-        mode="single"
-        selected={selectedDate}
-        onSelect={setSelectedDate}
-        locale={nb}
-        disabled={(date) => date < new Date() || !isDateAvailable(date)}
-        className="rounded-md border pointer-events-auto"
-        modifiers={{ available: availableDates }}
-        modifiersClassNames={{
-          available: "bg-emerald-100 dark:bg-emerald-900/40 font-bold",
-        }}
-      />
+      <div>
+        <Label>Velg dato</Label>
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button
+              variant="outline"
+              className={cn(
+                "w-full justify-start text-left font-normal mt-1",
+                !selectedDate && "text-muted-foreground"
+              )}
+            >
+              <CalendarIcon className="mr-2 h-4 w-4" />
+              {selectedDate ? format(selectedDate, "PPP", { locale: nb }) : "Velg en dato"}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-0" align="start">
+            <Calendar
+              mode="single"
+              selected={selectedDate}
+              onSelect={setSelectedDate}
+              locale={nb}
+              disabled={(date) => date < new Date() || !isDateAvailable(date)}
+              className="pointer-events-auto"
+              modifiers={{ available: availableDates }}
+              modifiersClassNames={{
+                available: "bg-emerald-100 dark:bg-emerald-900/40 font-bold",
+              }}
+            />
+          </PopoverContent>
+        </Popover>
+      </div>
 
       {selectedDate && slots.length > 0 && (
         <div className="space-y-2">
