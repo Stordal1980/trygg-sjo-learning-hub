@@ -9,6 +9,7 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Anchor, BookOpen, LogOut, Award, Menu, Settings, Lock } from "lucide-react";
 import type { User } from "@supabase/supabase-js";
 import { BoatInstructorChat } from "@/components/BoatInstructorChat";
+import { ExamBookingCard } from "@/components/ExamBookingCard";
 
 interface Course {
   id: string;
