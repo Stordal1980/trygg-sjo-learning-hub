@@ -6,10 +6,12 @@ import { Calendar } from "@/components/ui/calendar";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useToast } from "@/hooks/use-toast";
-import { CalendarCheck, Clock, Loader2 } from "lucide-react";
+import { CalendarCheck, CalendarIcon, Clock, Loader2 } from "lucide-react";
 import { format } from "date-fns";
 import { nb } from "date-fns/locale";
+import { cn } from "@/lib/utils";
 
 interface ExamSlot {
   id: string;
@@ -157,18 +159,37 @@ export function ExamBookingCard({ userId, hasAccess, compact }: ExamBookingCardP
 
   const bookingForm = (
     <div className="space-y-4">
-      <Calendar
-        mode="single"
-        selected={selectedDate}
-        onSelect={setSelectedDate}
-        locale={nb}
-        disabled={(date) => date < new Date() || !isDateAvailable(date)}
-        className="rounded-md border pointer-events-auto"
-        modifiers={{ available: availableDates }}
-        modifiersClassNames={{
-          available: "bg-emerald-100 dark:bg-emerald-900/40 font-bold",
-        }}
-      />
+      <div>
+        <Label>Velg dato</Label>
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button
+              variant="outline"
+              className={cn(
+                "w-full justify-start text-left font-normal mt-1",
+                !selectedDate && "text-muted-foreground"
+              )}
+            >
+              <CalendarIcon className="mr-2 h-4 w-4" />
+              {selectedDate ? format(selectedDate, "PPP", { locale: nb }) : "Velg en dato"}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-0" align="start">
+            <Calendar
+              mode="single"
+              selected={selectedDate}
+              onSelect={setSelectedDate}
+              locale={nb}
+              disabled={(date) => date < new Date() || !isDateAvailable(date)}
+              className="pointer-events-auto"
+              modifiers={{ available: availableDates }}
+              modifiersClassNames={{
+                available: "bg-emerald-100 dark:bg-emerald-900/40 font-bold",
+              }}
+            />
+          </PopoverContent>
+        </Popover>
+      </div>
 
       {selectedDate && slots.length > 0 && (
         <div className="space-y-2">
@@ -247,14 +268,14 @@ export function ExamBookingCard({ userId, hasAccess, compact }: ExamBookingCardP
     return (
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogTrigger asChild>
-          <Card className="border-2 border-emerald-500/30 bg-emerald-50/50 dark:bg-emerald-950/20 cursor-pointer hover:shadow-md transition-shadow">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Book eksamen</CardTitle>
-              <CalendarCheck className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+          <Card className="py-2 border-2 border-emerald-500/30 bg-emerald-50/50 dark:bg-emerald-950/20 cursor-pointer hover:shadow-md transition-shadow">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 pt-3 px-4">
+              <CardTitle className="text-xs font-medium text-emerald-700 dark:text-emerald-400">Book eksamen</CardTitle>
+              <CalendarCheck className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
             </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{confirmedCount}</div>
-              <p className="text-xs text-muted-foreground">
+            <CardContent className="px-4 pb-3">
+              <div className="text-3xl font-extrabold tracking-tight">{confirmedCount}</div>
+              <p className="text-xs text-muted-foreground mt-0.5">
                 {pendingCount > 0 ? `${pendingCount} venter på svar` : "Trykk for å booke"}
               </p>
             </CardContent>
