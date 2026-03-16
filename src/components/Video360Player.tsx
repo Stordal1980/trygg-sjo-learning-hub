@@ -163,7 +163,8 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
     maxRetries: number = 3
   ): Promise<void> => {
     video.muted = true;
-
+    // Signal play intent for auto-resume logic
+    (video as any)._setPlayIntent?.();
     let lastError: unknown;
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       try {
@@ -236,16 +237,50 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
     video.style.display = "none";
     videoRef.current = video;
 
+    // Track whether we intentionally paused
+    let userPaused = false;
+    let playIntentAt = 0;
+
     // Debug event listeners
     const updateState = (s: string, playing?: boolean) => () => {
       setDebugInfo((d) => ({ ...d, state: s }));
       if (typeof playing === "boolean") setIsPlaying(playing);
     };
-    video.addEventListener("playing", updateState("playing", true));
-    video.addEventListener("pause", updateState("paused", false));
+    video.addEventListener("playing", () => {
+      userPaused = false;
+      setDebugInfo((d) => ({ ...d, state: "playing" }));
+      setIsPlaying(true);
+    });
+    video.addEventListener("pause", () => {
+      // On Android Chrome, A-Frame causes spurious pause events right after play.
+      // If we recently called play() and didn't intentionally pause, auto-resume.
+      const timeSincePlayIntent = Date.now() - playIntentAt;
+      if (!userPaused && timeSincePlayIntent < 3000 && !video.ended) {
+        setDebugInfo((d) => ({ ...d, state: "auto-resuming" }));
+        // Re-attempt play after a short delay
+        setTimeout(() => {
+          if (video.paused && !video.ended && !userPaused) {
+            video.play().then(() => {
+              setIsPlaying(true);
+              setDebugInfo((d) => ({ ...d, state: "playing (resumed)" }));
+            }).catch(() => {
+              setIsPlaying(false);
+              setDebugInfo((d) => ({ ...d, state: "paused (resume failed)" }));
+            });
+          }
+        }, 100);
+      } else {
+        setDebugInfo((d) => ({ ...d, state: "paused" }));
+        setIsPlaying(false);
+      }
+    });
     video.addEventListener("waiting", updateState("waiting", false));
     video.addEventListener("stalled", updateState("stalled"));
     video.addEventListener("loadeddata", updateState("loadeddata"));
+
+    // Expose helpers on the video element for external access
+    (video as any)._setPlayIntent = () => { playIntentAt = Date.now(); userPaused = false; };
+    (video as any)._setUserPaused = () => { userPaused = true; };
     video.addEventListener("error", () => {
       const code = video.error?.code ?? 0;
       const noSource = video.networkState === HTMLMediaElement.NETWORK_NO_SOURCE;
