@@ -624,9 +624,35 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
     void attemptPlay(video);
   };
 
+  const [showDebug, setShowDebug] = useState(false);
+
   return (
     <div>
-      {/* Debug info box - disabled for now */}
+      {/* Collapsible debug info */}
+      <details
+        open={showDebug}
+        onToggle={(e) => setShowDebug((e.target as HTMLDetailsElement).open)}
+        className="mb-2"
+      >
+        <summary className="cursor-pointer text-xs font-mono text-emerald-500 select-none flex items-center gap-1 hover:text-emerald-400 transition-colors">
+          <span className="transition-transform inline-block" style={{ transform: showDebug ? "rotate(90deg)" : "rotate(0deg)" }}>▶</span>
+          Debug info
+        </summary>
+        <div className="mt-1 p-2 rounded bg-black/80 text-emerald-400 font-mono text-[10px] leading-relaxed overflow-auto max-h-40">
+          <div>State: {debugInfo.state}</div>
+          <div>Time: {debugInfo.time.toFixed(1)}s</div>
+          <div>Dims: {debugInfo.dimensions}</div>
+          <div>Muted: {String(debugInfo.muted)}</div>
+          <div>Ready: {debugInfo.readyState} | Net: {debugInfo.networkState}</div>
+          <div>Texture: {debugInfo.textureStatus}</div>
+          <div>Scene: {String(debugInfo.sceneLoaded)}</div>
+          <div>TexSize: {debugInfo.texSizeOk} (max {debugInfo.maxTexSize})</div>
+          <div>iOS: {String(debugInfo.isIOS)} | Retries: {debugInfo.retryCount}</div>
+          <div>Renderer: {debugInfo.renderer}</div>
+          <div className="break-all">Src: {debugInfo.videoSrc}</div>
+          <div className="break-all">UA: {debugInfo.browser}</div>
+        </div>
+      </details>
       {fatalError ? (
         <div className="w-full h-[400px] rounded-lg border border-border bg-muted flex flex-col items-center justify-center gap-3 p-4 text-center">
           <p className="text-sm text-foreground">{fatalError}</p>
