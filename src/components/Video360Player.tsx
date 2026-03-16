@@ -241,7 +241,14 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
     video.playsInline = true;
     (video as any).webkitPlaysInline = true;
     video.autoplay = false;
-    video.style.display = "none";
+    // Don't use display:none — Android Chrome may pause hidden video elements.
+    // Instead make it invisible but still "rendered" in the DOM.
+    video.style.position = "absolute";
+    video.style.width = "1px";
+    video.style.height = "1px";
+    video.style.opacity = "0";
+    video.style.pointerEvents = "none";
+    video.style.zIndex = "-1";
     videoRef.current = video;
 
     // Debug event listeners
@@ -291,9 +298,12 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
       console.error("WebGL context creation failed:", webglErr);
       // Fallback: show video as a regular flat player (not 360, but watchable)
       setDebugInfo(d => ({ ...d, renderer: "flat-video" }));
-      video.style.display = "";
+      video.style.position = "";
       video.style.width = "100%";
       video.style.height = "100%";
+      video.style.opacity = "1";
+      video.style.pointerEvents = "";
+      video.style.zIndex = "";
       video.style.objectFit = "cover";
       video.removeAttribute("crossorigin");
       video.controls = true;
