@@ -163,7 +163,8 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
     maxRetries: number = 3
   ): Promise<void> => {
     video.muted = true;
-
+    // Signal play intent for auto-resume logic
+    (video as any)._setPlayIntent?.();
     let lastError: unknown;
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       try {
