@@ -179,13 +179,12 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
         setFatalError(null);
         setDebugInfo(d => ({ ...d, state: "playing", retryCount: attempt }));
 
-        setTimeout(() => {
-          try {
-            if (videoRef.current && !videoRef.current.paused) {
-              videoRef.current.muted = false;
-            }
-          } catch (_) {}
-        }, 500);
+        // Unmute immediately within the same user gesture context.
+        // A setTimeout would lose the gesture context on Android Chrome,
+        // causing the autoplay policy to pause the video.
+        try {
+          video.muted = false;
+        } catch (_) {}
 
         return;
       } catch (err) {
