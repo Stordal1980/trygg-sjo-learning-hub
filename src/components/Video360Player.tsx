@@ -157,11 +157,27 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
     return () => clearInterval(interval);
   }, [debugInfo.maxTexSize]);
 
-  // Play the video with retry and exponential backoff.
+  // Play the video — try unmuted first (within gesture context), fall back to muted.
   const attemptPlay = async (
     video: HTMLVideoElement,
     maxRetries: number = 3
   ): Promise<void> => {
+    // First try: unmuted play within the user gesture context.
+    // On Android Chrome, the gesture context is lost after any await,
+    // so we must set muted=false BEFORE calling play().
+    video.muted = false;
+    try {
+      await video.play();
+      setIsPlaying(true);
+      setFatalError(null);
+      setDebugInfo(d => ({ ...d, state: "playing (unmuted)", retryCount: 0 }));
+      return;
+    } catch (_) {
+      // Unmuted play failed (autoplay policy) — fall back to muted
+      console.warn("Unmuted play failed, falling back to muted");
+    }
+
+    // Second try: muted play (always allowed by autoplay policy)
     video.muted = true;
 
     let lastError: unknown;
@@ -177,14 +193,7 @@ export function Video360Player({ videoUrl }: Video360PlayerProps) {
 
         setIsPlaying(true);
         setFatalError(null);
-        setDebugInfo(d => ({ ...d, state: "playing", retryCount: attempt }));
-
-        // Unmute immediately within the same user gesture context.
-        // A setTimeout would lose the gesture context on Android Chrome,
-        // causing the autoplay policy to pause the video.
-        try {
-          video.muted = false;
-        } catch (_) {}
+        setDebugInfo(d => ({ ...d, state: "playing (muted)", retryCount: attempt }));
 
         return;
       } catch (err) {
